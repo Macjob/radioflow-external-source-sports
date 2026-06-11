@@ -1,0 +1,22 @@
+[project]
+name = "radioflow-external-source-sports"
+version = "0.1.0"
+description = "External sports source for Radioflow that consumes football-data.org"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "requests>=2.32.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.9.0",
+]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B"]
+ignore = ["E501", "UP017"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

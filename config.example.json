@@ -1,0 +1,59 @@
+{
+  "timezone": "America/Santiago",
+  "notification_window_minutes": 30,
+  "default_match_duration_minutes": 120,
+  "countries": {
+    "Chile": {
+      "teams": ["Colo-Colo", "U. de Chile", "Universidad Católica"],
+      "team_mapping": {
+        "Colo-Colo": ["Colo-Colo", "CD Colo-Colo"],
+        "U. de Chile": ["U. de Chile", "Universidad de Chile", "Club Universidad de Chile"],
+        "Universidad Católica": ["Universidad Católica", "CD Universidad Católica"]
+      },
+      "radios": {
+        "Colo-Colo": {
+          "label": "Cooperativa 93.3 FM",
+          "url": "https://www.cooperativa.cl"
+        },
+        "U. de Chile": {
+          "label": "ADN Radio 91.7 FM",
+          "url": "https://www.adnradio.cl"
+        },
+        "Universidad Católica": {
+          "label": "Radio Agricultura",
+          "url": "https://www.radioagricultura.cl"
+        }
+      },
+      "default_radio": {
+        "label": "Radio Cooperativa",
+        "url": "https://www.cooperativa.cl"
+      }
+    },
+    "México": {
+      "teams": ["México", "América", "Chivas Guadalajara"],
+      "team_mapping": {
+        "México": ["Mexico", "México"],
+        "América": ["América", "Club América"],
+        "Chivas Guadalajara": ["Guadalajara", "Chivas", "Chivas Guadalajara"]
+      },
+      "radios": {
+        "México": {
+          "label": "W Radio 96.9 FM",
+          "url": "https://www.wradio.com.mx"
+        },
+        "América": {
+          "label": "W Radio 96.9 FM",
+          "url": "https://www.wradio.com.mx"
+        },
+        "Chivas Guadalajara": {
+          "label": "W Radio 96.9 FM",
+          "url": "https://www.wradio.com.mx"
+        }
+      },
+      "default_radio": {
+        "label": "W Radio 96.9 FM",
+        "url": "https://www.wradio.com.mx"
+      }
+    }
+  }
+}
