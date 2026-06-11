@@ -57,6 +57,9 @@ Editar `.env` y agregar tus credenciales:
 FOOTBALL_DATA_API_KEY=tu-api-key-aqui
 TELEGRAM_BOT_TOKEN=opcional
 TELEGRAM_CHAT_ID=opcional
+RADIOFLOW_BASE_URL=http://127.0.0.1:3000
+RADIOFLOW_SOURCE_KEY=sports-test
+RADIOFLOW_SOURCE_TOKEN=rf_ext_xxx
 ```
 
 ### 2. Crear `config.json`
@@ -206,6 +209,51 @@ También acepta `country`:
 curl "http://localhost:8000/radioflow/suggestions/today?source_key=sports-test&country=Chile"
 ```
 
+## Publicar sugerencias hacia RadioFlow
+
+El endpoint `GET /radioflow/suggestions/today` sirve para inspeccionar los payloads. Para enviarlos a una instancia real de RadioFlow usa el publisher CLI:
+
+```bash
+python -m app.publish_radioflow_suggestions
+```
+
+Antes de publicar:
+
+1. RadioFlow debe estar corriendo localmente o en una URL accesible.
+2. Debe existir una External Source activa en RadioFlow.
+3. La fuente debe tener capability `suggest_blocks`.
+4. Copia el `sourceKey` y el token raw `rf_ext_...` desde el panel de creación.
+5. Guarda el token al crearlo: RadioFlow solo lo muestra una vez.
+
+Configura `.env`:
+
+```env
+FOOTBALL_DATA_API_KEY=tu-api-key-aqui
+RADIOFLOW_BASE_URL=http://127.0.0.1:3000
+RADIOFLOW_SOURCE_KEY=sports-test
+RADIOFLOW_SOURCE_TOKEN=rf_ext_xxx
+```
+
+Primero revisa lo que se enviaría, sin llamar a RadioFlow:
+
+```bash
+python -m app.publish_radioflow_suggestions --dry-run
+```
+
+Filtra por país configurado:
+
+```bash
+python -m app.publish_radioflow_suggestions --country Chile --dry-run
+```
+
+Publica realmente:
+
+```bash
+python -m app.publish_radioflow_suggestions --country Chile
+```
+
+El comando imprime un resumen con sugerencias `created`, `deduplicated` y `failed`. Luego puedes revisarlas en RadioFlow en `/suggestions`.
+
 ### Script de notificaciones
 
 ```bash
@@ -242,9 +290,11 @@ radioflow-external-source-sports/
     football_client.py   # Cliente HTTP para football-data.org
     match_service.py     # Lógica de negocio: filtrado, timezone, radios
     radioflow_blocks.py  # Transformación a formato Radioflow
+    radioflow_publisher.py # Cliente HTTP para publicar sugerencias en RadioFlow
     telegram_notifier.py # Envío de notificaciones Telegram
     storage.py           # Persistencia JSON para dedup
     check_matches.py     # Script de notificaciones (python -m app.check_matches)
+    publish_radioflow_suggestions.py # Publisher CLI hacia /api/external-suggestions
   config.example.json
   .env.example
   requirements.txt
