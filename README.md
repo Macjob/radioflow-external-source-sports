@@ -139,7 +139,7 @@ Devuelve los partidos relevantes del día:
 curl http://localhost:8000/radioflow/blocks/today
 ```
 
-Devuelve los partidos en formato compatible con Radioflow:
+Devuelve los partidos en el formato histórico/intermedio de este prototipo:
 
 ```json
 [
@@ -163,6 +163,47 @@ Devuelve los partidos en formato compatible con Radioflow:
     }
   }
 ]
+```
+
+#### `GET /radioflow/suggestions/today`
+
+```bash
+curl "http://localhost:8000/radioflow/suggestions/today?source_key=sports-test"
+```
+
+Devuelve sugerencias en el contrato v0 real que RadioFlow acepta en `POST /api/external-suggestions`.
+El `source_key` debe coincidir con el `sourceKey` configurado en RadioFlow para la fuente externa:
+
+```json
+[
+  {
+    "sourceKey": "sports-test",
+    "externalContentId": "sports-match-123",
+    "title": "Hoy juega Colo-Colo",
+    "description": "Colo-Colo vs Universidad Católica a las 19:30",
+    "suggestedDate": "2026-06-10",
+    "suggestedStartTime": "19:30",
+    "suggestedEndTime": "21:30",
+    "contentKind": "metadata_only",
+    "contentMode": "reference_only",
+    "renderMode": "display_card",
+    "fallbackStrategy": "skip",
+    "conflictPolicy": "reject",
+    "metadata": {
+      "sport": "football",
+      "team": "Colo-Colo",
+      "source": "football-data.org",
+      "radioLabel": "Cooperativa 93.3 FM",
+      "radioUrl": "https://www.cooperativa.cl"
+    }
+  }
+]
+```
+
+También acepta `country`:
+
+```bash
+curl "http://localhost:8000/radioflow/suggestions/today?source_key=sports-test&country=Chile"
 ```
 
 ### Script de notificaciones

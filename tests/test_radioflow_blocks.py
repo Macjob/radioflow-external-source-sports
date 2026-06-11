@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.config import Config
 from app.models import RadioInfo, SportsEvent
-from app.radioflow_blocks import to_radioflow_blocks
+from app.radioflow_blocks import to_radioflow_blocks, to_radioflow_suggestions
 
 
 def _make_event(team: str, hour: int = 19, minute: int = 30) -> SportsEvent:
@@ -66,3 +67,37 @@ class TestToRadioflowBlocks:
         event.radio = None
         blocks = to_radioflow_blocks([event], config)
         assert blocks[0].action.label == "Sin radio asignada"
+
+
+class TestToRadioflowSuggestions:
+    def test_single_event_maps_to_radioflow_v0_suggestion_payload(self):
+        event = _make_event("Colo-Colo", 19, 30)
+        config = _make_config()
+        suggestions = to_radioflow_suggestions([event], config, source_key="sports-test")
+
+        assert len(suggestions) == 1
+        suggestion = suggestions[0]
+        payload = suggestion.model_dump(by_alias=True)
+
+        assert payload["sourceKey"] == "sports-test"
+        assert payload["externalContentId"] == "sports-match-Colo-Colo"
+        assert payload["title"] == "Hoy juega Colo-Colo"
+        assert "Colo-Colo vs Other Team" in payload["description"]
+        expected_start = event.starts_at.astimezone(ZoneInfo(config.timezone))
+        expected_end = expected_start + timedelta(minutes=config.default_match_duration_minutes)
+        assert payload["suggestedDate"] == expected_start.date().isoformat()
+        assert payload["suggestedStartTime"] == expected_start.strftime("%H:%M")
+        assert payload["suggestedEndTime"] == expected_end.strftime("%H:%M")
+        assert payload["contentKind"] == "metadata_only"
+        assert payload["contentMode"] == "reference_only"
+        assert payload["renderMode"] == "display_card"
+        assert payload["fallbackStrategy"] == "skip"
+        assert payload["conflictPolicy"] == "reject"
+        assert payload["metadata"]["sport"] == "football"
+        assert payload["metadata"]["team"] == "Colo-Colo"
+        assert payload["metadata"]["radioLabel"] == "Test Radio"
+        assert payload["metadata"]["radioUrl"] == "https://example.com"
+
+    def test_empty_events_map_to_empty_suggestions(self):
+        config = _make_config()
+        assert to_radioflow_suggestions([], config, source_key="sports-test") == []

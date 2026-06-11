@@ -197,3 +197,39 @@ class TestBlocksTodayWithCountry:
         data = resp.json()
         assert len(data) > 0
         assert data[0]["metadata"]["team"] == "Colo-Colo"
+
+
+class TestSuggestionsToday:
+    def test_returns_radioflow_v0_suggestions(self, client):
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        app.state.football_client.get_today_matches.return_value = [
+            {
+                "id": 123,
+                "utcDate": f"{today}T19:30:00Z",
+                "status": "SCHEDULED",
+                "homeTeam": {"id": 1, "name": "Colo-Colo"},
+                "awayTeam": {"id": 2, "name": "Other Team"},
+                "competition": {"id": 2024, "name": "Primera División"},
+            }
+        ]
+
+        resp = client.get("/radioflow/suggestions/today?source_key=sports-test")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        suggestion = data[0]
+        assert suggestion["sourceKey"] == "sports-test"
+        assert suggestion["externalContentId"] == "sports-match-123"
+        assert suggestion["suggestedDate"] == today
+        assert suggestion["suggestedStartTime"]
+        assert suggestion["suggestedEndTime"]
+        assert suggestion["contentKind"] == "metadata_only"
+        assert suggestion["contentMode"] == "reference_only"
+        assert suggestion["renderMode"] == "display_card"
+        assert suggestion["conflictPolicy"] == "reject"
+
+    def test_source_key_is_required(self, client):
+        resp = client.get("/radioflow/suggestions/today")
+
+        assert resp.status_code == 422
