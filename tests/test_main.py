@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+import app.main as main_module
 from app.config import Config
 from app.main import app
 from app.models import CountryConfig, RadioInfo
@@ -43,7 +44,8 @@ def config_countries():
 
 
 @pytest.fixture
-def client(config):
+def client(config, monkeypatch):
+    monkeypatch.setattr(main_module, "load_config", lambda: config)
     with TestClient(app) as c:
         app.state.config = config
         app.state.football_client = MagicMock()
@@ -52,7 +54,8 @@ def client(config):
 
 
 @pytest.fixture
-def client_countries(config_countries):
+def client_countries(config_countries, monkeypatch):
+    monkeypatch.setattr(main_module, "load_config", lambda: config_countries)
     with TestClient(app) as c:
         app.state.config = config_countries
         app.state.football_client = MagicMock()
