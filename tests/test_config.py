@@ -13,7 +13,7 @@ def test_load_config_success(temp_config_file: str):
     assert config.timezone == "America/Santiago"
     assert "Colo-Colo" in config.teams
     assert config.radios["Colo-Colo"].label == "Cooperativa 93.3 FM"
-    assert config.radios["Colo-Colo"].streamUrl == "https://stream.example.com/cooperativa.aac"
+    assert config.radios["Colo-Colo"].stream_url == "https://stream.example.com/cooperativa.aac"
     assert "Colo-Colo" in config.team_mapping
 
 
