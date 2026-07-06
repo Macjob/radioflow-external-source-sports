@@ -79,6 +79,9 @@ def to_radioflow_suggestions(
         if event.radio:
             metadata["radioLabel"] = event.radio.label
             metadata["radioUrl"] = event.radio.url
+            if event.radio.streamUrl:
+                metadata["stationName"] = event.radio.label
+                metadata["streamUrl"] = event.radio.streamUrl
 
         suggestion = RadioflowExternalSuggestion(
             source_key=source_key,

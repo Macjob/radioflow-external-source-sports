@@ -21,7 +21,11 @@ SAMPLE_CONFIG_FLAT: dict[str, Any] = {
         "Universidad Católica": ["Universidad Católica", "CD Universidad Católica"],
     },
     "radios": {
-        "Colo-Colo": {"label": "Cooperativa 93.3 FM", "url": "https://www.cooperativa.cl"},
+        "Colo-Colo": {
+            "label": "Cooperativa 93.3 FM",
+            "url": "https://www.cooperativa.cl",
+            "streamUrl": "https://stream.example.com/cooperativa.aac",
+        },
         "U. de Chile": {"label": "ADN Radio 91.7 FM", "url": "https://www.adnradio.cl"},
         "Universidad Católica": {
             "label": "Radio Agricultura",

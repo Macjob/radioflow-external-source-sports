@@ -6,7 +6,12 @@ from app.models import RadioInfo, SportsEvent
 from app.radioflow_blocks import to_radioflow_blocks, to_radioflow_suggestions
 
 
-def _make_event(team: str, hour: int = 19, minute: int = 30) -> SportsEvent:
+def _make_event(
+    team: str,
+    hour: int = 19,
+    minute: int = 30,
+    radio: RadioInfo | None = None,
+) -> SportsEvent:
     dt = datetime(2026, 6, 10, hour, minute, tzinfo=timezone.utc).astimezone()
     return SportsEvent(
         id=f"match-{team}",
@@ -14,7 +19,7 @@ def _make_event(team: str, hour: int = 19, minute: int = 30) -> SportsEvent:
         team=team,
         starts_at=dt,
         timezone="America/Santiago",
-        radio=RadioInfo(label="Test Radio", url="https://example.com"),
+        radio=radio or RadioInfo(label="Test Radio", url="https://example.com"),
     )
 
 
@@ -101,3 +106,21 @@ class TestToRadioflowSuggestions:
     def test_empty_events_map_to_empty_suggestions(self):
         config = _make_config()
         assert to_radioflow_suggestions([], config, source_key="sports-test") == []
+
+    def test_event_with_stream_url_adds_resolved_radio_metadata(self):
+        event = _make_event(
+            "Colo-Colo",
+            radio=RadioInfo(
+                label="Test Radio",
+                url="https://example.com",
+                streamUrl="https://stream.example.com/test.aac",
+            ),
+        )
+        config = _make_config()
+        suggestions = to_radioflow_suggestions([event], config, source_key="sports-test")
+
+        metadata = suggestions[0].model_dump(by_alias=True)["metadata"]
+        assert metadata["radioLabel"] == "Test Radio"
+        assert metadata["radioUrl"] == "https://example.com"
+        assert metadata["stationName"] == "Test Radio"
+        assert metadata["streamUrl"] == "https://stream.example.com/test.aac"

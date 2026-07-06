@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class RadioInfo(BaseModel):
     label: str
     url: str
+    streamUrl: str | None = None
 
 
 class CountryConfig(BaseModel):
