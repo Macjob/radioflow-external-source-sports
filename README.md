@@ -276,6 +276,10 @@ Para ejecutar el checker cada 10 minutos:
 */10 * * * * cd /ruta/al/proyecto && .venv/bin/python -m app.check_matches
 ```
 
+### Despliegue de producción
+
+Para ejecutar el publisher como un job Docker aislado, sin exponer FastAPI, consulta [`deploy/README.md`](deploy/README.md). Incluye imagen de producción, script endurecido, servicio `systemd`, timer cada 15 minutos, dry-run, logs y actualización.
+
 ---
 
 ## Estructura del proyecto

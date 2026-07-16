@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the RadioFlow sports publisher every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=true
+Unit=radioflow-sports-publisher.service
+
+[Install]
+WantedBy=timers.target

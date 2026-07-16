@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish sports suggestions to RadioFlow
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/radioflow-sports/publisher.env
+ConditionPathExists=/opt/radioflow-sports/config.json
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/radioflow-sports-publisher
+ExecStart=/opt/radioflow-sports/run-publisher.sh
+TimeoutStartSec=180
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
