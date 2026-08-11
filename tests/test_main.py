@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ import app.main as main_module
 from app.config import Config
 from app.main import app
 from app.models import CountryConfig, RadioInfo
+from tests.conftest import today_at_utc
 
 
 def _country_config(**kwargs) -> CountryConfig:
@@ -78,11 +80,10 @@ class TestEventsToday:
         assert resp.json() == []
 
     def test_returns_events(self, client):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 123,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Other Team"},
@@ -110,11 +111,10 @@ class TestBlocksToday:
         assert resp.json() == []
 
     def test_returns_blocks(self, client):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 123,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Other Team"},
@@ -139,12 +139,11 @@ class TestBlocksToday:
 
 class TestEventsTodayWithCountry:
     def test_filters_by_country(self, client_countries):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         app.state = client_countries.app.state
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 123,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Other Team"},
@@ -158,12 +157,11 @@ class TestEventsTodayWithCountry:
         assert data[0]["team"] == "Colo-Colo"
 
     def test_international_match_with_default_radio(self, client_countries):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         app.state = client_countries.app.state
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 456,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 10, "name": "Mexico"},
                 "awayTeam": {"id": 11, "name": "South Africa"},
@@ -180,12 +178,11 @@ class TestEventsTodayWithCountry:
 
 class TestBlocksTodayWithCountry:
     def test_blocks_with_country(self, client_countries):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         app.state = client_countries.app.state
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 123,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Other Team"},
@@ -201,11 +198,11 @@ class TestBlocksTodayWithCountry:
 
 class TestSuggestionsToday:
     def test_returns_radioflow_v0_suggestions(self, client):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(ZoneInfo("America/Santiago")).strftime("%Y-%m-%d")
         app.state.football_client.get_today_matches.return_value = [
             {
                 "id": 123,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Other Team"},

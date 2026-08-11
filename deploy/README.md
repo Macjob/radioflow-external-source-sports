@@ -220,6 +220,11 @@ sudo journalctl -u radioflow-sports-publisher.service -n 100 --no-pager
 
 Después confirma las sugerencias en RadioFlow, en `/suggestions`.
 
+Para validar el onboarding de Autofill, revisa en `/suggestions` una sugerencia
+con radio reproducible, elige **Save for Autofill**, confirma que aún no exista
+un bloque programado y luego usa **Fill gaps** sobre un espacio de duración
+compatible en `/schedule`.
+
 ## 10. Activar el timer
 
 ```bash

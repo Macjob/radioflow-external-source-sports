@@ -8,6 +8,7 @@ class RadioInfo(BaseModel):
     label: str
     url: str
     stream_url: str | None = Field(default=None, alias="streamUrl")
+    country: str | None = None
 
 
 class CountryConfig(BaseModel):

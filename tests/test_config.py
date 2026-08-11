@@ -14,6 +14,7 @@ def test_load_config_success(temp_config_file: str):
     assert "Colo-Colo" in config.teams
     assert config.radios["Colo-Colo"].label == "Cooperativa 93.3 FM"
     assert config.radios["Colo-Colo"].stream_url == "https://stream.example.com/cooperativa.aac"
+    assert config.radios["Colo-Colo"].country == "CL"
     assert "Colo-Colo" in config.team_mapping
 
 

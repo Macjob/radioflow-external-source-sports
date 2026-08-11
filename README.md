@@ -68,6 +68,11 @@ RADIOFLOW_SOURCE_TOKEN=rf_ext_xxx
 cp config.example.json config.json
 ```
 
+Cada radio puede declarar `country` con un código ISO 3166-1 alpha-2, por
+ejemplo `CL` o `MX`. RadioFlow usa ese dato para resolver correctamente una
+estación por `radioLabel` cuando no hay `streamUrl`; las configuraciones
+existentes sin `country` siguen siendo válidas.
+
 Editar según necesidad: equipos, radios, zona horaria, etc.
 
 ### 3. Obtener API key de football-data.org
@@ -197,7 +202,8 @@ El `source_key` debe coincidir con el `sourceKey` configurado en RadioFlow para 
       "team": "Colo-Colo",
       "source": "football-data.org",
       "radioLabel": "Cooperativa 93.3 FM",
-      "radioUrl": "https://www.cooperativa.cl"
+      "radioUrl": "https://www.cooperativa.cl",
+      "radioCountry": "CL"
     }
   }
 ]
@@ -251,6 +257,19 @@ Publica realmente:
 ```bash
 python -m app.publish_radioflow_suggestions --country Chile
 ```
+
+Para completar el recorrido de Autofill:
+
+1. Confirma que el payload tenga una ventana completa y `streamUrl` o
+   `radioLabel`; usa `radioCountry` cuando la resolución dependa del nombre.
+2. En `/suggestions`, revisa la sugerencia y elige **Save for Autofill**.
+3. Confirma que la sugerencia desaparezca de pendientes sin crear todavía un
+   bloque de Schedule.
+4. En `/schedule`, deja un espacio con la misma duración y ejecuta **Fill gaps**.
+5. Verifica que RadioFlow cree un bloque `live_radio` dentro del espacio sin
+   mover ni superponer los bloques fijos.
+
+Guardar para Autofill no programa ni inicia reproducción por sí solo.
 
 El comando imprime un resumen con sugerencias `created`, `deduplicated` y `failed`. Luego puedes revisarlas en RadioFlow en `/suggestions`.
 
