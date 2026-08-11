@@ -4,11 +4,18 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.config import Config
 from app.models import CountryConfig, RadioInfo
+
+
+def today_at_utc(timezone_name: str = "America/Santiago", hour: int = 19, minute: int = 30) -> str:
+    local_now = datetime.now(ZoneInfo(timezone_name))
+    local_match = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return local_match.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 SAMPLE_CONFIG_FLAT: dict[str, Any] = {
     "timezone": "America/Santiago",
@@ -25,6 +32,7 @@ SAMPLE_CONFIG_FLAT: dict[str, Any] = {
             "label": "Cooperativa 93.3 FM",
             "url": "https://www.cooperativa.cl",
             "streamUrl": "https://stream.example.com/cooperativa.aac",
+            "country": "CL",
         },
         "U. de Chile": {"label": "ADN Radio 91.7 FM", "url": "https://www.adnradio.cl"},
         "Universidad Católica": {
@@ -46,7 +54,7 @@ SAMPLE_CONFIG_COUNTRIES: dict[str, Any] = {
                 "U. de Chile": ["U. de Chile", "Universidad de Chile"],
             },
             "radios": {
-                "Colo-Colo": {"label": "Cooperativa 93.3 FM", "url": "https://www.cooperativa.cl"},
+                "Colo-Colo": {"label": "Cooperativa 93.3 FM", "url": "https://www.cooperativa.cl", "country": "CL"},
                 "U. de Chile": {"label": "ADN Radio 91.7 FM", "url": "https://www.adnradio.cl"},
             },
             "default_radio": {"label": "Radio Cooperativa", "url": "https://www.cooperativa.cl"},
@@ -115,11 +123,9 @@ def temp_config_file(sample_config_dict: dict[str, Any], monkeypatch: pytest.Mon
 
 @pytest.fixture
 def sample_match() -> dict[str, Any]:
-    now = datetime.now(timezone.utc)
-    utc_date = now.strftime("%Y-%m-%dT19:30:00Z")
     return {
         "id": 123456,
-        "utcDate": utc_date,
+        "utcDate": today_at_utc(),
         "status": "SCHEDULED",
         "homeTeam": {"id": 1, "name": "Colo-Colo"},
         "awayTeam": {"id": 2, "name": "Universidad Católica"},
@@ -129,14 +135,12 @@ def sample_match() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_matches(sample_match: dict[str, Any]) -> list:
-    now = datetime.now(timezone.utc)
-    utc_date_late = now.strftime("%Y-%m-%dT22:00:00Z")
     return {
         "matches": [
             sample_match,
             {
                 "id": 789012,
-                "utcDate": utc_date_late,
+                "utcDate": today_at_utc(hour=22, minute=0),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 3, "name": "CD Universidad Católica"},
                 "awayTeam": {"id": 4, "name": "Otro Equipo"},

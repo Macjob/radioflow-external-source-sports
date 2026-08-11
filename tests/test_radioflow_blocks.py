@@ -19,7 +19,7 @@ def _make_event(
         team=team,
         starts_at=dt,
         timezone="America/Santiago",
-        radio=radio or RadioInfo(label="Test Radio", url="https://example.com"),
+        radio=radio or RadioInfo(label="Test Radio", url="https://example.com", country="CL"),
     )
 
 
@@ -30,7 +30,7 @@ def _make_config() -> Config:
         default_match_duration_minutes=120,
         teams=["Colo-Colo"],
         team_mapping={"Colo-Colo": ["Colo-Colo"]},
-        radios={"Colo-Colo": RadioInfo(label="Test Radio", url="https://example.com")},
+        radios={"Colo-Colo": RadioInfo(label="Test Radio", url="https://example.com", country="CL")},
     )
 
 
@@ -102,6 +102,7 @@ class TestToRadioflowSuggestions:
         assert payload["metadata"]["team"] == "Colo-Colo"
         assert payload["metadata"]["radioLabel"] == "Test Radio"
         assert payload["metadata"]["radioUrl"] == "https://example.com"
+        assert payload["metadata"]["radioCountry"] == "CL"
 
     def test_empty_events_map_to_empty_suggestions(self):
         config = _make_config()
@@ -114,6 +115,7 @@ class TestToRadioflowSuggestions:
                 label="Test Radio",
                 url="https://example.com",
                 streamUrl="https://stream.example.com/test.aac",
+                country="CL",
             ),
         )
         config = _make_config()
@@ -122,5 +124,20 @@ class TestToRadioflowSuggestions:
         metadata = suggestions[0].model_dump(by_alias=True)["metadata"]
         assert metadata["radioLabel"] == "Test Radio"
         assert metadata["radioUrl"] == "https://example.com"
+        assert metadata["radioCountry"] == "CL"
         assert metadata["stationName"] == "Test Radio"
         assert metadata["streamUrl"] == "https://stream.example.com/test.aac"
+
+    def test_radio_country_remains_optional_for_existing_configs(self):
+        event = _make_event(
+            "Colo-Colo",
+            radio=RadioInfo(label="Legacy Radio", url="https://example.com"),
+        )
+
+        metadata = to_radioflow_suggestions(
+            [event],
+            _make_config(),
+            source_key="sports-test",
+        )[0].model_dump(by_alias=True)["metadata"]
+
+        assert "radioCountry" not in metadata

@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from app.match_service import _match_team, get_relevant_matches
+from tests.conftest import today_at_utc
 
 
 class TestMatchTeam:
@@ -43,12 +43,11 @@ class TestGetRelevantMatches:
         assert events == []
 
     def test_irrelevant_teams_skipped(self, sample_config):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         client = MagicMock()
         client.get_today_matches.return_value = [
             {
                 "id": 999,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 10, "name": "Real Madrid"},
                 "awayTeam": {"id": 11, "name": "Barcelona"},
@@ -60,13 +59,12 @@ class TestGetRelevantMatches:
         assert events == []
 
     def test_team_without_radio(self, sample_config):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         sample_config.radios = {}
         client = MagicMock()
         client.get_today_matches.return_value = [
             {
                 "id": 111,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Universidad Católica"},
@@ -95,11 +93,10 @@ class TestGetRelevantMatches:
         assert events == []
 
     def test_missing_id_skipped(self, sample_config):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         client = MagicMock()
         client.get_today_matches.return_value = [
             {
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 1, "name": "Colo-Colo"},
                 "awayTeam": {"id": 2, "name": "Universidad Católica"},
@@ -122,12 +119,11 @@ class TestGetRelevantMatchesWithCountry:
         assert events[0].radio.label == "Cooperativa 93.3 FM"
 
     def test_international_match_uses_default_radio(self, sample_config_countries):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         client = MagicMock()
         client.get_today_matches.return_value = [
             {
                 "id": 999,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 10, "name": "Mexico"},
                 "awayTeam": {"id": 11, "name": "South Africa"},
@@ -142,12 +138,11 @@ class TestGetRelevantMatchesWithCountry:
         assert events[0].radio.label == "Radio Cooperativa"
 
     def test_international_match_not_shown_without_country(self, sample_config_countries):
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         client = MagicMock()
         client.get_today_matches.return_value = [
             {
                 "id": 999,
-                "utcDate": f"{today}T19:30:00Z",
+                "utcDate": today_at_utc(),
                 "status": "SCHEDULED",
                 "homeTeam": {"id": 10, "name": "Mexico"},
                 "awayTeam": {"id": 11, "name": "South Africa"},
