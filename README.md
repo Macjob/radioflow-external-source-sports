@@ -1,8 +1,24 @@
-# Radioflow External Source — Sports
+# Radioflow External Source - Sports
 
 Prototipo de fuente externa deportiva para [Radioflow](https://github.com/anomalyco/radioflow).
 
 Este proyecto es independiente del repo principal de Radioflow. Su objetivo es validar un **contrato HTTP** que Radioflow podría consumir en el futuro para generar bloques de reproducción automáticos desde fuentes externas.
+
+---
+
+## Hosted Add-on v1a
+
+El servicio implementa el primer contrato alojado de RadioFlow sin cambiar los flujos existentes:
+
+```text
+GET /manifest.json
+GET /health
+GET /addon/events
+```
+
+`/manifest.json` declara `app.radioflow.sports`, sus capacidades y el evento real que hoy produce: `match.scheduled`. `/addon/events` entrega esos partidos dentro del envelope genérico de RadioFlow. `/health` responde `degraded` cuando el proveedor deportivo no está configurado, sin exponer credenciales.
+
+RadioFlow v1b puede instalar este servicio desde su catálogo y consultarlo mediante polling. `FOOTBALL_DATA_API_KEY`, Python y `config.json` siguen siendo responsabilidad exclusiva del operador del servicio alojado; el usuario normal no recibe tokens ni configura infraestructura local.
 
 ---
 

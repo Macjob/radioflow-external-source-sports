@@ -69,7 +69,62 @@ class TestHealthEndpoint:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert resp.json() == {"status": "ok", "version": "0.1.0"}
+
+    def test_health_is_degraded_without_provider_credentials(self, client):
+        app.state.football_client = None
+
+        resp = client.get("/health")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "degraded", "version": "0.1.0"}
+
+
+class TestAddonManifest:
+    def test_exposes_radioflow_manifest_v1(self, client):
+        resp = client.get("/manifest.json")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "manifestVersion": 1,
+            "id": "app.radioflow.sports",
+            "name": "Sports Notifications",
+            "description": "Scheduled sports events from the hosted RadioFlow service.",
+            "version": "0.1.0",
+            "author": "RadioFlow",
+            "capabilities": ["notifications", "suggest_blocks"],
+            "events": ["match.scheduled"],
+            "configuration": {"supported": False},
+            "endpoints": {"health": "/health", "events": "/addon/events"},
+        }
+
+
+class TestAddonEvents:
+    def test_wraps_sports_events_in_the_generic_envelope(self, client):
+        app.state.football_client.get_today_matches.return_value = [
+            {
+                "id": 123,
+                "utcDate": today_at_utc(),
+                "status": "SCHEDULED",
+                "homeTeam": {"id": 1, "name": "Colo-Colo"},
+                "awayTeam": {"id": 2, "name": "Other Team"},
+                "competition": {"id": 2024, "name": "Primera División"},
+            }
+        ]
+
+        resp = client.get("/addon/events")
+
+        assert resp.status_code == 200
+        events = resp.json()
+        assert len(events) == 1
+        assert events[0]["type"] == "match.scheduled"
+        assert events[0]["source"] == "app.radioflow.sports"
+        assert events[0]["id"].startswith("match.scheduled:match-123:")
+        assert events[0]["data"]["team"] == "Colo-Colo"
+        assert events[0]["data"]["matchId"] == "match-123"
+        assert events[0]["data"]["startsAt"]
+        assert events[0]["data"]["endsAt"]
+        assert events[0]["data"]["provider"] == "football-data.org"
 
 
 class TestEventsToday:
