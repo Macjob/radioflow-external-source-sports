@@ -121,6 +121,10 @@ class TestAddonEvents:
         assert events[0]["source"] == "app.radioflow.sports"
         assert events[0]["id"].startswith("match.scheduled:match-123:")
         assert events[0]["data"]["team"] == "Colo-Colo"
+        assert events[0]["data"]["matchId"] == "match-123"
+        assert events[0]["data"]["startsAt"]
+        assert events[0]["data"]["endsAt"]
+        assert events[0]["data"]["provider"] == "football-data.org"
 
 
 class TestEventsToday:

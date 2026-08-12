@@ -18,7 +18,7 @@ GET /addon/events
 
 `/manifest.json` declara `app.radioflow.sports`, sus capacidades y el evento real que hoy produce: `match.scheduled`. `/addon/events` entrega esos partidos dentro del envelope genérico de RadioFlow. `/health` responde `degraded` cuando el proveedor deportivo no está configurado, sin exponer credenciales.
 
-En una instancia alojada, `FOOTBALL_DATA_API_KEY`, Python y `config.json` son responsabilidad del operador del add-on. No forman parte del flujo del usuario normal. La instalación desde el catálogo de RadioFlow, el registro persistente y la configuración por usuario quedan para v1b.
+RadioFlow v1b puede instalar este servicio desde su catálogo y consultarlo mediante polling. `FOOTBALL_DATA_API_KEY`, Python y `config.json` siguen siendo responsabilidad exclusiva del operador del servicio alojado; el usuario normal no recibe tokens ni configura infraestructura local.
 
 ---
 

@@ -68,7 +68,10 @@ async def health():
 
 @app.get("/addon/events", response_model=list[AddonEventEnvelope])
 async def addon_events(country: str | None = Query(None)):
-    return [to_addon_event(event) for event in _get_events(country)]
+    config = getattr(app.state, "config", None)
+    if not config:
+        raise HTTPException(status_code=500, detail="Configuration not loaded")
+    return [to_addon_event(event, config.default_match_duration_minutes) for event in _get_events(country)]
 
 
 @app.get("/events/today", response_model=list[SportsEvent])

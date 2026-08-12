@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -57,12 +57,29 @@ SPORTS_ADDON_MANIFEST = AddonManifest(
 )
 
 
-def to_addon_event(event: SportsEvent) -> AddonEventEnvelope:
+def to_addon_event(event: SportsEvent, duration_minutes: int) -> AddonEventEnvelope:
     starts_at = event.starts_at.isoformat()
+    radio = None
+    if event.radio:
+        radio = {
+            "label": event.radio.label,
+            "url": event.radio.url,
+            "streamUrl": event.radio.stream_url,
+            "country": event.radio.country,
+        }
     return AddonEventEnvelope(
         id=f"match.scheduled:{event.id}:{starts_at}",
         type="match.scheduled",
         timestamp=event.starts_at,
         source=ADDON_ID,
-        data=event.model_dump(mode="json"),
+        data={
+            "matchId": event.id,
+            "title": event.title,
+            "team": event.team,
+            "startsAt": starts_at,
+            "endsAt": (event.starts_at + timedelta(minutes=duration_minutes)).isoformat(),
+            "timezone": event.timezone,
+            "provider": event.source,
+            "radio": radio,
+        },
     )
