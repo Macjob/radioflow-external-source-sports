@@ -1,0 +1,14 @@
+[
+  {
+    "id": "chile-primera-division",
+    "name": "Primera División de Chile",
+    "country": "Chile",
+    "currentSeason": "2026",
+    "providers": {
+      "thesportsdb": {
+        "leagueId": "4627",
+        "leagueName": "Chile Primera Division"
+      }
+    }
+  }
+]

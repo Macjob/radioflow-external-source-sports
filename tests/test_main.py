@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -7,8 +8,10 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.config import Config
+from app.hosted_configuration import HostedConfigurationStore
 from app.main import app
 from app.models import CountryConfig, RadioInfo
+from app.sports_provider import Competition, ScheduledMatch, Team, TeamRef
 from tests.conftest import today_at_utc
 
 
@@ -46,12 +49,23 @@ def config_countries():
 
 
 @pytest.fixture
-def client(config, monkeypatch):
+def client(config, monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "load_config", lambda: config)
     with TestClient(app) as c:
         app.state.config = config
         app.state.football_client = MagicMock()
         app.state.football_client.get_today_matches.return_value = []
+        app.state.sports_provider = MagicMock()
+        app.state.sports_provider.name = "thesportsdb"
+        app.state.sports_provider.get_competitions.return_value = [
+            Competition("chile-primera-division", "Primera División de Chile", "Chile", "2026")
+        ]
+        app.state.sports_provider.get_teams.return_value = [
+            Team("chile-primera-division:colo-colo", "Colo-Colo"),
+            Team("chile-primera-division:universidad-de-chile", "Universidad de Chile"),
+        ]
+        app.state.sports_provider.get_scheduled_matches.return_value = []
+        app.state.configuration_store = HostedConfigurationStore(tmp_path / "hosted.db", "test-secret-" * 4)
         yield c
 
 
@@ -69,15 +83,15 @@ class TestHealthEndpoint:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "version": "0.1.0"}
+        assert resp.json() == {"status": "ok", "version": "0.3.0", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_provider_credentials(self, client):
-        app.state.football_client = None
+        app.state.sports_provider = None
 
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.1.0"}
+        assert resp.json() == {"status": "degraded", "version": "0.3.0", "provider": "thesportsdb"}
 
 
 class TestAddonManifest:
@@ -90,41 +104,88 @@ class TestAddonManifest:
             "id": "app.radioflow.sports",
             "name": "Sports Notifications",
             "description": "Scheduled sports events from the hosted RadioFlow service.",
-            "version": "0.1.0",
+            "version": "0.3.0",
             "author": "RadioFlow",
             "capabilities": ["notifications", "suggest_blocks"],
-            "events": ["match.scheduled"],
-            "configuration": {"supported": False},
+            "events": ["suggest_block"],
+            "configuration": {
+                "type": "web",
+                "start": "/configuration/start",
+                "exchange": "/configuration/exchange",
+            },
             "endpoints": {"health": "/health", "events": "/addon/events"},
         }
 
 
 class TestAddonEvents:
-    def test_wraps_sports_events_in_the_generic_envelope(self, client):
-        app.state.football_client.get_today_matches.return_value = [
-            {
-                "id": 123,
-                "utcDate": today_at_utc(),
-                "status": "SCHEDULED",
-                "homeTeam": {"id": 1, "name": "Colo-Colo"},
-                "awayTeam": {"id": 2, "name": "Other Team"},
-                "competition": {"id": 2024, "name": "Primera División"},
-            }
-        ]
-
+    def test_requires_an_opaque_configuration_header(self, client):
         resp = client.get("/addon/events")
+        assert resp.status_code == 401
+
+    def test_configuration_handshake_filters_and_emits_generic_suggestions(self, client):
+        state = "s" * 43
+        started = client.post("/configuration/start", json={
+            "callbackUrl": "http://testserver/api/addons/configuration/callback",
+            "state": state,
+            "mode": "install",
+        })
+        assert started.status_code == 200
+        session_id = started.json()["configureUrl"].rsplit("/", 1)[-1]
+        page = client.get(f"/configure/{session_id}")
+        assert page.status_code == 200
+        assert "Instalar en RadioFlow" in page.text
+        completed = client.post(f"/configure/{session_id}/complete", json={
+            "competition": {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
+            "teams": [{"id": "chile-primera-division:colo-colo", "name": "Colo-Colo"}],
+            "events": ["match.scheduled"],
+        })
+        callback = urlparse(completed.json()["callbackUrl"])
+        callback_query = parse_qs(callback.query)
+        assert callback_query["state"] == [state]
+        exchanged = client.post("/configuration/exchange", json={"code": callback_query["code"][0]})
+        assert exchanged.status_code == 200
+        config_id = exchanged.json()["configId"]
+        assert "Primera División" in exchanged.json()["summary"]["lines"][0]
+        assert client.post("/configuration/exchange", json={"code": callback_query["code"][0]}).status_code == 400
+
+        app.state.sports_provider.get_scheduled_matches.return_value = [ScheduledMatch(
+            id="match-123",
+            competition_id="chile-primera-division",
+            starts_at=datetime.now(timezone.utc) + timedelta(days=1),
+            home_team=TeamRef("chile-primera-division:colo-colo", "Colo-Colo"),
+            away_team=TeamRef("chile-primera-division:universidad-de-chile", "Universidad de Chile"),
+        )]
+        resp = client.get("/addon/events", headers={"X-RadioFlow-Config-Id": config_id})
 
         assert resp.status_code == 200
+        app.state.sports_provider.get_scheduled_matches.assert_called_once()
         events = resp.json()
         assert len(events) == 1
-        assert events[0]["type"] == "match.scheduled"
+        assert events[0]["type"] == "suggest_block"
         assert events[0]["source"] == "app.radioflow.sports"
-        assert events[0]["id"].startswith("match.scheduled:match-123:")
-        assert events[0]["data"]["team"] == "Colo-Colo"
-        assert events[0]["data"]["matchId"] == "match-123"
-        assert events[0]["data"]["startsAt"]
-        assert events[0]["data"]["endsAt"]
-        assert events[0]["data"]["provider"] == "football-data.org"
+        assert events[0]["data"]["externalContentId"] == "sports:match-123"
+        assert events[0]["data"]["metadata"]["eventType"] == "match.scheduled"
+        assert events[0]["data"]["metadata"]["source"] == "sports-addon"
+        assert events[0]["data"]["metadata"]["startsAt"].endswith("Z")
+
+    def test_catalog_endpoints_use_normalized_provider_models(self, client):
+        started = client.post("/configuration/start", json={
+            "callbackUrl": "http://testserver/api/addons/configuration/callback",
+            "state": "x" * 43,
+            "mode": "install",
+        })
+        session_id = started.json()["configureUrl"].rsplit("/", 1)[-1]
+        leagues = client.get(f"/configure/api/leagues?session={session_id}")
+        teams = client.get(
+            f"/configure/api/teams?session={session_id}&competition=chile-primera-division"
+        )
+        assert leagues.json() == [{
+            "id": "chile-primera-division",
+            "name": "Primera División de Chile",
+            "country": "Chile",
+            "season": "2026",
+        }]
+        assert teams.json()[0]["name"] == "Colo-Colo"
 
 
 class TestEventsToday:

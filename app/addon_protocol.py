@@ -6,11 +6,13 @@ from pydantic import BaseModel, Field
 from app.models import SportsEvent
 
 ADDON_ID = "app.radioflow.sports"
-ADDON_VERSION = "0.1.0"
+ADDON_VERSION = "0.3.0"
 
 
 class AddonConfiguration(BaseModel):
-    supported: Literal[False] = False
+    type: Literal["web"] = "web"
+    start: str = "/configuration/start"
+    exchange: str = "/configuration/exchange"
 
 
 class AddonEndpoints(BaseModel):
@@ -34,6 +36,7 @@ class AddonManifest(BaseModel):
 class AddonHealth(BaseModel):
     status: Literal["ok", "degraded", "error"]
     version: str
+    provider: str | None = None
 
 
 class AddonEventEnvelope(BaseModel):
@@ -51,7 +54,7 @@ SPORTS_ADDON_MANIFEST = AddonManifest(
     version=ADDON_VERSION,
     author="RadioFlow",
     capabilities=["notifications", "suggest_blocks"],
-    events=["match.scheduled"],
+    events=["suggest_block"],
     configuration=AddonConfiguration(),
     endpoints=AddonEndpoints(),
 )
