@@ -134,6 +134,9 @@ class TestAddonEvents:
         page = client.get(f"/configure/{session_id}")
         assert page.status_code == 200
         assert "Instalar en RadioFlow" in page.text
+        assert 'id="select-all-teams"' in page.text
+        assert "Seleccionar todos los equipos" in page.text
+        assert "selectAll.indeterminate" in page.text
         completed = client.post(f"/configure/{session_id}/complete", json={
             "competition": {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
             "teams": [{"id": "chile-primera-division:colo-colo", "name": "Colo-Colo"}],
