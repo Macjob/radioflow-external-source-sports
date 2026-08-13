@@ -8,6 +8,10 @@
       "thesportsdb": {
         "leagueId": "4627",
         "leagueName": "Chile Primera Division"
+      },
+      "chile": {
+        "leagueId": "liga-de-primera",
+        "leagueName": "Liga de Primera"
       }
     }
   }

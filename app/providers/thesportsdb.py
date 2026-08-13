@@ -6,6 +6,8 @@ from app.provider_cache import SingleFlightTTLCache
 from app.provider_config import CompetitionCatalogEntry
 from app.sports_provider import (
     Competition,
+    CompletedMatch,
+    CompletedMatchOptions,
     ProviderInvalidResponseError,
     ProviderRateLimitedError,
     ProviderUnauthorizedError,
@@ -21,6 +23,7 @@ from app.sports_provider import (
 TEAMS_CACHE_TTL_SECONDS = 6 * 60 * 60
 FIXTURES_CACHE_TTL_SECONDS = 30 * 60
 SCHEDULED_STATUSES = {"ns", "not started", "scheduled", "tbd"}
+FINISHED_STATUSES = {"ft", "finished", "match finished"}
 
 
 class TheSportsDBProvider:
@@ -143,6 +146,49 @@ class TheSportsDBProvider:
                 starts_at=starts_at,
                 home_team=TeamRef(home_team_id, home_name),
                 away_team=TeamRef(away_team_id, away_name),
+            )
+        return sorted(matches.values(), key=lambda match: match.starts_at)
+
+    def get_results(
+        self,
+        competition_id: str,
+        options: CompletedMatchOptions,
+    ) -> list[CompletedMatch]:
+        if options.starts_after.tzinfo is None or options.starts_before.tzinfo is None:
+            raise ValueError("completed match filters must be timezone-aware")
+        if options.starts_before <= options.starts_after:
+            return []
+        entry = self._competition(competition_id)
+        starts_after = options.starts_after.astimezone(timezone.utc)
+        starts_before = options.starts_before.astimezone(timezone.utc)
+        matches: dict[str, CompletedMatch] = {}
+        for row in self._season_rows(entry):
+            status = str(row.get("strStatus", "")).strip().casefold()
+            if status not in FINISHED_STATUSES:
+                continue
+            starts_at = self._parse_utc_start(row)
+            if not starts_after <= starts_at <= starts_before:
+                continue
+            home_name = str(row.get("strHomeTeam", "")).strip()
+            away_name = str(row.get("strAwayTeam", "")).strip()
+            try:
+                home_score = int(row["intHomeScore"])
+                away_score = int(row["intAwayScore"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ProviderInvalidResponseError(
+                    "sports provider returned an incomplete finished match"
+                ) from error
+            home_team_id = build_team_id(entry.id, home_name)
+            away_team_id = build_team_id(entry.id, away_name)
+            match_id = build_match_id(entry.id, starts_at, home_team_id, away_team_id)
+            matches[match_id] = CompletedMatch(
+                id=match_id,
+                competition_id=entry.id,
+                starts_at=starts_at,
+                home_team=TeamRef(home_team_id, home_name),
+                away_team=TeamRef(away_team_id, away_name),
+                home_score=home_score,
+                away_score=away_score,
             )
         return sorted(matches.values(), key=lambda match: match.starts_at)
 

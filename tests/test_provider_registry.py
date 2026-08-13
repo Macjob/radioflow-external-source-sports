@@ -2,6 +2,7 @@ import pytest
 
 from app.provider_config import CompetitionCatalogEntry, ProviderCompetitionMapping
 from app.provider_registry import get_sports_provider
+from app.providers.chile import ChileSportsProvider
 from app.providers.thesportsdb import TheSportsDBProvider
 
 CATALOG = (
@@ -10,7 +11,10 @@ CATALOG = (
         name="Primera División de Chile",
         country="Chile",
         current_season="2026",
-        providers={"thesportsdb": ProviderCompetitionMapping("4627", "Chile Primera Division")},
+        providers={
+            "chile": ProviderCompetitionMapping("liga-de-primera", "Liga de Primera"),
+            "thesportsdb": ProviderCompetitionMapping("4627", "Chile Primera Division"),
+        },
     ),
 )
 
@@ -27,3 +31,17 @@ def test_registry_selects_configured_provider_once():
 def test_registry_rejects_unknown_provider():
     with pytest.raises(ValueError, match="unsupported SPORTS_PROVIDER"):
         get_sports_provider({"SPORTS_PROVIDER": "unknown"}, catalog=CATALOG)
+
+
+def test_registry_selects_chile_provider_without_fetching_per_user(tmp_path):
+    provider = get_sports_provider(
+        {
+            "SPORTS_PROVIDER": "chile",
+            "SPORTS_CONFIG_DB_PATH": str(tmp_path / "sports-addon.db"),
+        },
+        catalog=CATALOG,
+    )
+
+    assert isinstance(provider, ChileSportsProvider)
+    assert provider.name == "chile"
+    assert provider.has_data is False

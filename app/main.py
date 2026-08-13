@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -33,6 +34,7 @@ from app.sports_provider import (
     ProviderUnauthorizedError,
     ScheduledMatchOptions,
     SportsProvider,
+    SyncableSportsProvider,
     Team,
 )
 
@@ -79,6 +81,7 @@ class ConfigurationSelection(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    sync_task = None
     try:
         app.state.config = load_config()
         logger.info("Self-hosted config loaded successfully")
@@ -91,7 +94,19 @@ async def lifespan(app: FastAPI):
     try:
         app.state.sports_provider = get_sports_provider()
         logger.info("Hosted sports provider loaded: %s", app.state.sports_provider.name)
-    except ValueError as error:
+        if isinstance(app.state.sports_provider, SyncableSportsProvider):
+            try:
+                await asyncio.to_thread(
+                    app.state.sports_provider.sync_if_due,
+                    force=not app.state.sports_provider.has_data,
+                )
+            except ProviderError as error:
+                logger.error("Initial sports sync failed: %s", error)
+                if not app.state.sports_provider.has_data:
+                    app.state.sports_provider = None
+            if app.state.sports_provider is not None:
+                sync_task = asyncio.create_task(_provider_sync_loop(app.state.sports_provider))
+    except (ProviderError, ValueError) as error:
         app.state.sports_provider = None
         logger.error("Hosted sports provider is unavailable: %s", error)
     signing_secret = os.getenv("SPORTS_CONFIG_SIGNING_SECRET", "").strip()
@@ -107,7 +122,23 @@ async def lifespan(app: FastAPI):
         logger.warning("Hosted sports catalog and events are degraded")
     if not signing_secret:
         logger.warning("SPORTS_CONFIG_SIGNING_SECRET not set; hosted configuration is disabled")
-    yield
+    try:
+        yield
+    finally:
+        if sync_task:
+            sync_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await sync_task
+
+
+async def _provider_sync_loop(provider: SyncableSportsProvider):
+    interval = max(60, int(os.getenv("SPORTS_SYNC_CHECK_INTERVAL_SECONDS", "3600")))
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.to_thread(provider.sync_if_due)
+        except ProviderError as error:
+            logger.error("Periodic sports sync failed; stored data remains available: %s", error)
 
 
 app = FastAPI(title="Radioflow External Source - Sports", version=ADDON_VERSION, lifespan=lifespan)

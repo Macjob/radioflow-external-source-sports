@@ -1,7 +1,11 @@
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from app.sports_provider import ScheduledMatchOptions, SportsProvider
+from app.sports_provider import (
+    CompletedMatchOptions,
+    ScheduledMatchOptions,
+    SportsProvider,
+)
 
 
 def assert_sports_provider_contract(provider: SportsProvider, now: datetime):
@@ -30,3 +34,15 @@ def assert_sports_provider_contract(provider: SportsProvider, now: datetime):
     assert all(match.starts_at.tzinfo is timezone.utc for match in matches)
     assert all(match.starts_at >= now for match in matches)
     assert all("idEvent" not in asdict(match) and "strTimestamp" not in asdict(match) for match in matches)
+
+    results = provider.get_results(
+        competition.id,
+        CompletedMatchOptions(
+            starts_after=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            starts_before=datetime(2026, 8, 20, tzinfo=timezone.utc),
+        ),
+    )
+    assert results
+    assert all(match.status == "finished" for match in results)
+    assert all(match.starts_at.tzinfo is timezone.utc for match in results)
+    assert all("idEvent" not in asdict(match) for match in results)

@@ -3,7 +3,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -33,11 +33,30 @@ class ScheduledMatch:
     starts_at: datetime
     home_team: TeamRef
     away_team: TeamRef
+    venue: str | None = None
     status: Literal["scheduled"] = "scheduled"
 
 
 @dataclass(frozen=True)
 class ScheduledMatchOptions:
+    starts_after: datetime
+    starts_before: datetime
+
+
+@dataclass(frozen=True)
+class CompletedMatch:
+    id: str
+    competition_id: str
+    starts_at: datetime
+    home_team: TeamRef
+    away_team: TeamRef
+    home_score: int
+    away_score: int
+    status: Literal["finished"] = "finished"
+
+
+@dataclass(frozen=True)
+class CompletedMatchOptions:
     starts_after: datetime
     starts_before: datetime
 
@@ -75,6 +94,20 @@ class SportsProvider(Protocol):
         competition_id: str,
         options: ScheduledMatchOptions,
     ) -> list[ScheduledMatch]: ...
+
+    def get_results(
+        self,
+        competition_id: str,
+        options: CompletedMatchOptions,
+    ) -> list[CompletedMatch]: ...
+
+
+@runtime_checkable
+class SyncableSportsProvider(Protocol):
+    @property
+    def has_data(self) -> bool: ...
+
+    def sync_if_due(self, *, force: bool = False) -> bool: ...
 
 
 def build_team_id(competition_id: str, name: str) -> str:
