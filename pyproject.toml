@@ -1,7 +1,7 @@
 [project]
 name = "radioflow-external-source-sports"
 version = "0.1.0"
-description = "External sports source for Radioflow that consumes football-data.org"
+description = "Provider-neutral hosted and self-hosted sports source for RadioFlow"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

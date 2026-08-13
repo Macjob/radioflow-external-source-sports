@@ -1,0 +1,7 @@
+{
+  "teams": [
+    {"idTeam": "137724", "strTeam": "Colo-Colo", "idLeague": "4627"},
+    {"idTeam": "137736", "strTeam": "Universidad de Chile", "idLeague": "4627"},
+    {"idTeam": "137735", "strTeam": "Universidad Católica", "idLeague": "4627"}
+  ]
+}

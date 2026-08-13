@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -14,6 +15,7 @@ from urllib.parse import urlparse
 
 OPAQUE_PATTERN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
 SESSION_TTL = timedelta(minutes=10)
+DOMAIN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9:-]{1,159}$")
 
 
 @dataclass(frozen=True)
@@ -286,10 +288,16 @@ def validate_configuration(
     teams: list[dict[str, Any]],
     events: list[str],
 ) -> dict[str, Any]:
-    league_id = competition.get("id")
+    competition_id = competition.get("id")
     season = competition.get("season")
     name = str(competition.get("name", "")).strip()
-    if not isinstance(league_id, int) or league_id <= 0 or not isinstance(season, int) or not name:
+    if (
+        not isinstance(competition_id, str)
+        or not DOMAIN_ID_PATTERN.fullmatch(competition_id)
+        or not isinstance(season, str)
+        or not 1 <= len(season) <= 20
+        or not name
+    ):
         raise ValueError("invalid competition")
     if not 1 <= len(teams) <= 20:
         raise ValueError("select between 1 and 20 teams")
@@ -298,14 +306,19 @@ def validate_configuration(
     for team in teams:
         team_id = team.get("id")
         team_name = str(team.get("name", "")).strip()
-        if not isinstance(team_id, int) or team_id <= 0 or not team_name or team_id in seen:
+        if (
+            not isinstance(team_id, str)
+            or not DOMAIN_ID_PATTERN.fullmatch(team_id)
+            or not team_name
+            or team_id in seen
+        ):
             raise ValueError("invalid team selection")
         seen.add(team_id)
         normalized_teams.append({"id": team_id, "name": team_name[:120]})
     if events != ["match.scheduled"]:
         raise ValueError("this release supports only match.scheduled")
     return {
-        "competition": {"id": league_id, "name": name[:120], "season": season},
+        "competition": {"id": competition_id, "name": name[:120], "season": season},
         "teams": normalized_teams,
         "events": events,
     }

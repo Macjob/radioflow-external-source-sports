@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from app.models import SportsEvent
 
 ADDON_ID = "app.radioflow.sports"
-ADDON_VERSION = "0.2.0"
+ADDON_VERSION = "0.3.0"
 
 
 class AddonConfiguration(BaseModel):
@@ -36,6 +36,7 @@ class AddonManifest(BaseModel):
 class AddonHealth(BaseModel):
     status: Literal["ok", "degraded", "error"]
     version: str
+    provider: str | None = None
 
 
 class AddonEventEnvelope(BaseModel):

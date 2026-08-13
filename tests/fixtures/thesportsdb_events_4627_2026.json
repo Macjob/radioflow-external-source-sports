@@ -1,0 +1,51 @@
+{
+  "events": [
+    {
+      "idEvent": "2413061",
+      "idLeague": "4627",
+      "strLeague": "Chile Primera Division",
+      "strSeason": "2026",
+      "strHomeTeam": "Universidad de Concepción",
+      "strAwayTeam": "Deportes La Serena",
+      "idHomeTeam": "137737",
+      "idAwayTeam": "139473",
+      "strTimestamp": "2026-08-14T23:00:00",
+      "dateEvent": "2026-08-14",
+      "dateEventLocal": "2026-08-14",
+      "strTime": "23:00:00",
+      "strTimeLocal": "19:00:00",
+      "strStatus": "NS",
+      "strPostponed": "no"
+    },
+    {
+      "idEvent": "2345679",
+      "idLeague": "4627",
+      "strLeague": "Chile Primera Division",
+      "strSeason": "2026",
+      "strHomeTeam": "Colo-Colo",
+      "strAwayTeam": "Universidad de Chile",
+      "idHomeTeam": "140494",
+      "idAwayTeam": "140496",
+      "strTimestamp": "2026-08-18T00:00:00Z",
+      "dateEvent": "2026-08-18",
+      "dateEventLocal": "2026-08-17",
+      "strTime": "00:00:00",
+      "strTimeLocal": "20:00:00",
+      "strStatus": "NS",
+      "strPostponed": "no"
+    },
+    {
+      "idEvent": "2345600",
+      "idLeague": "4627",
+      "strLeague": "Chile Primera Division",
+      "strSeason": "2026",
+      "strHomeTeam": "Cobresal",
+      "strAwayTeam": "Everton",
+      "strTimestamp": "2026-08-01T20:00:00Z",
+      "dateEvent": "2026-08-01",
+      "strTime": "20:00:00",
+      "strStatus": "FT",
+      "strPostponed": "no"
+    }
+  ]
+}

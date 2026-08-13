@@ -2,15 +2,22 @@
 
 This service is a separate long-running container on the existing VPS. It does not run inside RadioFlow and does not replace the self-hosted publisher.
 
-## Required secrets
+## Provider configuration and required secrets
 
-- `API_FOOOTBAL`: API-Football v3 key, sent only as `x-apisports-key` by the backend.
+- `SPORTS_PROVIDER=thesportsdb`: selects the single deterministic Alpha provider.
+- `THESPORTSDB_API_KEY`: `123` is TheSportsDB's documented Free v1 key; replace it with the hosted operator's key when appropriate.
+- `SPORTS_COMPETITIONS_FILE`: technical catalog containing internal competition IDs and provider mappings.
+- `SPORTS_SCHEDULE_TIMEZONE`: final display timezone used when translating UTC matches to `suggest_block` schedule fields.
 - `SPORTS_CONFIG_SIGNING_SECRET`: at least 32 random bytes. It derives opaque `configId` values during the one-time exchange; rotate only with an explicit migration because existing IDs depend on it.
 - `SPORTS_ALLOWED_CALLBACK_ORIGINS`: comma-separated RadioFlow deployment origins. Production must not retain localhost defaults.
 
 The SQLite database stores only `SHA-256(configId)`. That is sufficient to authenticate `/addon/events`, locate an existing configuration for reconfiguration, disable the old configuration after rotation, and deduplicate ownership-free configuration records. The raw `configId` exists only in RadioFlow's encrypted store and in the `X-RadioFlow-Config-Id` request header.
 
-The API-Football subscription must grant access to the current season for the configured competitions. A valid Free key was verified against the official API, but on 2026-08-12 that plan reported access only to seasons 2022-2024. It returned Primera División 2024 with 16 teams, but it cannot validate or operate the current 2026 fixture vertical. Treat an upgrade/current-season entitlement and a successful `/teams` plus `/fixtures` smoke test as deployment gates.
+TheSportsDB is the Alpha reference provider, not an Addon Protocol dependency. Its Free v1 limits include 30 requests/minute, 1 event from `eventsnextleague.php`, 15 from `eventsseason.php`, and 10 teams from `search_all_teams.php`. Live Chile 2026 evidence showed that the season response contains old fixtures while the next-league response contains the upcoming match. The service combines both schedules and builds the wizard team list from both the team endpoint and season participants. All equivalent calls share the same cache. Treat a successful 16-team and upcoming-match smoke test as a deployment gate because Free responses can still be incomplete.
+
+The provider normalizes `dateEvent` + `strTime` to UTC and rejects ambiguous or contradictory timestamps. The wizard receives only internal competition/team IDs. Provider IDs and credentials never leave this service.
+
+The web-configurable service has not yet been deployed, so there is no production data migration. Existing development SQLite files created by the API-Football branch contain numeric provider IDs and must be discarded or reconfigured; do not promote them to the hosted volume.
 
 ## Build and run
 

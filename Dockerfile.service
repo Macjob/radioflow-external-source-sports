@@ -18,6 +18,7 @@ COPY requirements-service.txt ./
 RUN pip install --no-cache-dir --requirement requirements-service.txt
 
 COPY app ./app
+COPY config ./config
 
 USER radioflow
 EXPOSE 8000

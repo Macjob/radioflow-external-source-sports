@@ -7,8 +7,8 @@ from app.hosted_configuration import HostedConfigurationStore, hash_config_id
 
 def selection():
     return (
-        {"id": 265, "name": "Primera División", "season": 2026},
-        [{"id": 2285, "name": "Colo-Colo"}],
+        {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
+        [{"id": "chile-primera-division:colo-colo", "name": "Colo-Colo"}],
         ["match.scheduled"],
     )
 
@@ -26,7 +26,7 @@ def test_store_persists_only_config_hash_and_supports_all_bearer_operations(tmp_
 
     stored = store.get_configuration(config_id)
     assert stored is not None
-    assert stored.teams == [{"id": 2285, "name": "Colo-Colo"}]
+    assert stored.teams == [{"id": "chile-primera-division:colo-colo", "name": "Colo-Colo"}]
     with sqlite3.connect(path) as connection:
         row = connection.execute("SELECT config_hash FROM configurations").fetchone()
         dump = " ".join(connection.iterdump())
@@ -42,13 +42,13 @@ def test_store_persists_only_config_hash_and_supports_all_bearer_operations(tmp_
     )
     new_code, _, _, _ = store.save_configuration(
         reconfigure.id,
-        {"id": 265, "name": "Primera División", "season": 2026},
-        [{"id": 2290, "name": "Universidad de Chile"}],
+        {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
+        [{"id": "chile-primera-division:universidad-de-chile", "name": "Universidad de Chile"}],
         ["match.scheduled"],
     )
     new_config_id, _ = store.exchange_code(new_code)
     assert store.get_configuration(config_id) is None
-    assert store.get_configuration(new_config_id).teams[0]["id"] == 2290
+    assert store.get_configuration(new_config_id).teams[0]["id"] == "chile-primera-division:universidad-de-chile"
 
 
 def test_store_rejects_unknown_reconfiguration_and_replayed_exchange(tmp_path):

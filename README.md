@@ -26,13 +26,56 @@ POST /configuration/exchange
 
 El manifest declara `configuration.type = "web"`. RadioFlow abre el configurador, recibe un código de un solo uso y lo intercambia por un `configId` opaco. RadioFlow cifra ese bearer credential y lo envía únicamente como `X-RadioFlow-Config-Id`; Sports conserva sólo su hash SHA-256 en SQLite.
 
-El backend alojado usa API-Football v3 mediante `API_FOOOTBAL`. La clave nunca se entrega al navegador ni a RadioFlow. La primera vertical permite seleccionar una competición, uno o más equipos y el único evento habilitado en esta versión: `match.scheduled`. El addon produce la acción genérica `suggest_block`, manteniendo toda la semántica deportiva fuera del core.
+El backend alojado selecciona el proveedor mediante `SPORTS_PROVIDER`. Para Alpha usa `TheSportsDBProvider`, pero el configurador y la generación de eventos consumen únicamente modelos internos neutrales. La credencial nunca se entrega al navegador ni a RadioFlow. La primera vertical permite seleccionar una competición, uno o más equipos y el único evento deportivo habilitado en esta versión: `match.scheduled`. El addon lo traduce a la acción genérica `suggest_block`, manteniendo toda la semántica deportiva fuera del core.
 
 El servicio oficial se publica bajo `https://addons.radioflow.media/sports`. Consulta [`deploy/HOSTED_SERVICE.md`](deploy/HOSTED_SERVICE.md) para el contenedor persistente, SQLite y proxy HTTPS. El publisher self-hosted existente sigue disponible sin cambios.
 
-`/manifest.json` declara `app.radioflow.sports`, sus capacidades y el evento real que hoy produce: `match.scheduled`. `/addon/events` entrega esos partidos dentro del envelope genérico de RadioFlow. `/health` responde `degraded` cuando el proveedor deportivo no está configurado, sin exponer credenciales.
+`/manifest.json` declara `app.radioflow.sports`, sus capacidades y la acción real que hoy produce: `suggest_block`. `/addon/events` entrega sugerencias creadas desde partidos `match.scheduled` normalizados. `/health` identifica el provider activo y responde `degraded` cuando no está disponible, sin exponer credenciales.
 
-RadioFlow v1b puede instalar este servicio desde su catálogo y consultarlo mediante polling. `FOOTBALL_DATA_API_KEY`, Python y `config.json` siguen siendo responsabilidad exclusiva del operador del servicio alojado; el usuario normal no recibe tokens ni configura infraestructura local.
+RadioFlow v1b puede instalar este servicio desde su catálogo y consultarlo mediante polling. Las credenciales del proveedor, Python y la infraestructura siguen siendo responsabilidad exclusiva del operador del servicio alojado; el usuario normal no recibe tokens ni configura infraestructura local.
+
+### SportsProvider
+
+La dependencia alojada sigue esta frontera:
+
+```text
+wizard + lógica de configuración
+              ↓
+       SportsProvider
+              ↓
+     TheSportsDBProvider
+```
+
+`SportsProvider` entrega sólo `Competition`, `Team` y `ScheduledMatch`. Los campos `idLeague`, `idTeam`, `idEvent`, `strTimestamp` y demás estructuras externas se traducen dentro del adapter. Los IDs guardados en la configuración son internos (`chile-primera-division`, por ejemplo), no IDs globales del proveedor.
+
+Variables del servicio alojado:
+
+```env
+SPORTS_PROVIDER=thesportsdb
+THESPORTSDB_API_KEY=123
+SPORTS_COMPETITIONS_FILE=config/sports_competitions.json
+SPORTS_SCHEDULE_TIMEZONE=America/Santiago
+```
+
+`THESPORTSDB_API_KEY=123` es la clave Free publicada por TheSportsDB. Una clave premium puede reemplazarla sin cambiar el core. El catálogo técnico declara qué competiciones habilita el operador y mantiene los mappings específicos dentro de `config/sports_competitions.json`.
+
+Para agregar un provider futuro:
+
+1. Implementar `SportsProvider` en `app/providers/`.
+2. Traducir todas sus respuestas y errores a modelos/errores internos.
+3. Añadir su factory exclusivamente en `app/provider_registry.py`.
+4. Agregar mappings técnicos al catálogo.
+5. Ejecutar los contract tests reutilizables.
+
+No se debe modificar el wizard, `hosted_events`, RadioFlow core ni el Addon Protocol.
+
+### Caché y límites de TheSportsDB Free
+
+Las consultas se cachean por provider, competición y temporada, nunca por instalación ni `configId`. Equipos usa TTL de 6 horas; fixtures, 30 minutos. La caché incluye single-flight para colapsar solicitudes concurrentes equivalentes dentro del proceso alojado.
+
+TheSportsDB Free documenta 30 requests/minuto, hasta 1 resultado para `eventsnextleague.php`, 15 para `eventsseason.php` y 10 para `search_all_teams.php`. La comprobación viva de Chile 2026 mostró que la temporada Free devuelve los 15 partidos más antiguos, mientras `eventsnextleague.php` contiene el próximo partido. Alpha combina ambas respuestas, deduplica y filtra localmente fechas futuras/estado programado. El wizard combina los equipos del endpoint de búsqueda con los participantes de la temporada para evitar presentar sólo los primeros 10. Aun así, Free puede entregar una ventana incompleta; antes de desplegar deben verificarse los 16 equipos y el próximo fixture esperado.
+
+TheSportsDB documenta `dateEvent` + `strTime` como UTC. El adapter usa esos campos, comprueba cualquier `strTimestamp` coexistente y expone sólo `startsAt` UTC. Los campos `dateEventLocal` y `strTimeLocal` no salen del adapter.
 
 ---
 
@@ -143,7 +186,7 @@ Documentación interactiva en `http://localhost:8000/docs`.
 curl http://localhost:8000/health
 ```
 
-Respuesta: `{"status": "ok"}`
+Respuesta: `{"status": "ok", "version": "0.3.0", "provider": "thesportsdb"}`
 
 #### `GET /events/today`
 
@@ -371,8 +414,8 @@ radioflow-external-source-sports/
 ## Próximos pasos recomendados
 
 1. Agregar autenticación vía API key en los endpoints.
-2. Soportar más proveedores deportivos (TheSportsDB, API-Sports).
-3. Cachear respuestas de la API externa para reducir requests.
+2. Agregar adapters futuros sólo cuando exista una necesidad operativa validada.
+3. Migrar la caché a un backend distribuido antes de ejecutar múltiples réplicas o workers.
 4. Agregar soporte para múltiples zonas horarias por equipo.
 5. Implementar un sistema de plugins más formal para Radioflow.
 6. Agregar health check con métricas de la fuente externa.
