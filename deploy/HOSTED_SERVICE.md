@@ -31,7 +31,17 @@ RADIOFLOW_SPORTS_IMAGE_TAG="$GIT_SHA" SPORTS_HOSTED_ENV_FILE=/opt/radioflow-spor
   docker compose --file deploy/docker-compose.hosted.yml up -d
 ```
 
-The compose file publishes only `127.0.0.1:8010`. Install the Nginx example after adapting certificate paths, then verify:
+The official VPS uses the existing RadioFlow Caddy container. The compose file
+publishes only `127.0.0.1:8010` for host diagnostics and also joins the external
+`radioflow_default` network as `sports-addon`. Set `RADIOFLOW_PROXY_NETWORK` only
+if the RadioFlow compose project uses a different network name. RadioFlow's
+versioned `Caddyfile` owns the public `addons.radioflow.media/sports` route; the
+Nginx example remains an alternative for self-hosted operators and is not used
+by the official deployment.
+
+Create the `addons.radioflow.media` DNS record pointing to the VPS before Caddy
+requests its certificate. Keep it DNS-only for the first certificate issuance,
+then verify:
 
 ```bash
 curl --fail https://addons.radioflow.media/sports/manifest.json

@@ -16,6 +16,8 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    networks:
+      - radioflow-proxy
     deploy:
       resources:
         limits:
@@ -24,3 +26,8 @@ services:
 
 volumes:
   sports-addon-data:
+
+networks:
+  radioflow-proxy:
+    external: true
+    name: ${RADIOFLOW_PROXY_NETWORK:-radioflow_default}
