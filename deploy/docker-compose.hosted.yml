@@ -1,0 +1,26 @@
+services:
+  sports-addon:
+    image: radioflow-sports-addon:${RADIOFLOW_SPORTS_IMAGE_TAG:?set RADIOFLOW_SPORTS_IMAGE_TAG}
+    container_name: radioflow-sports-addon
+    restart: unless-stopped
+    env_file:
+      - ${SPORTS_HOSTED_ENV_FILE:-/opt/radioflow-sports/hosted.env}
+    volumes:
+      - sports-addon-data:/data
+    ports:
+      - "127.0.0.1:8010:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+
+volumes:
+  sports-addon-data:

@@ -16,6 +16,20 @@ GET /health
 GET /addon/events
 ```
 
+La versión web-configurable agrega:
+
+```text
+POST /configuration/start
+GET  /configure/{sessionId}
+POST /configuration/exchange
+```
+
+El manifest declara `configuration.type = "web"`. RadioFlow abre el configurador, recibe un código de un solo uso y lo intercambia por un `configId` opaco. RadioFlow cifra ese bearer credential y lo envía únicamente como `X-RadioFlow-Config-Id`; Sports conserva sólo su hash SHA-256 en SQLite.
+
+El backend alojado usa API-Football v3 mediante `API_FOOOTBAL`. La clave nunca se entrega al navegador ni a RadioFlow. La primera vertical permite seleccionar una competición, uno o más equipos y el único evento habilitado en esta versión: `match.scheduled`. El addon produce la acción genérica `suggest_block`, manteniendo toda la semántica deportiva fuera del core.
+
+El servicio oficial se publica bajo `https://addons.radioflow.media/sports`. Consulta [`deploy/HOSTED_SERVICE.md`](deploy/HOSTED_SERVICE.md) para el contenedor persistente, SQLite y proxy HTTPS. El publisher self-hosted existente sigue disponible sin cambios.
+
 `/manifest.json` declara `app.radioflow.sports`, sus capacidades y el evento real que hoy produce: `match.scheduled`. `/addon/events` entrega esos partidos dentro del envelope genérico de RadioFlow. `/health` responde `degraded` cuando el proveedor deportivo no está configurado, sin exponer credenciales.
 
 RadioFlow v1b puede instalar este servicio desde su catálogo y consultarlo mediante polling. `FOOTBALL_DATA_API_KEY`, Python y `config.json` siguen siendo responsabilidad exclusiva del operador del servicio alojado; el usuario normal no recibe tokens ni configura infraestructura local.
