@@ -17,6 +17,7 @@ from app.addon_protocol import (
     AddonHealth,
     AddonManifest,
 )
+from app.broadcast_catalog import BroadcastCatalog, load_broadcast_catalog
 from app.config import load_config
 from app.configurator_web import render_configuration_html, render_landing_html
 from app.football_client import FootballDataClient
@@ -89,6 +90,13 @@ async def lifespan(app: FastAPI):
         app.state.config = None
         logger.info("No self-hosted config.json; hosted configuration remains available")
 
+    try:
+        app.state.broadcast_catalog = load_broadcast_catalog()
+        logger.info("Hosted sports broadcast catalog loaded")
+    except ValueError as error:
+        app.state.broadcast_catalog = None
+        logger.error("Hosted sports broadcast catalog is unavailable: %s", error)
+
     legacy_api_key = os.getenv("FOOTBALL_DATA_API_KEY", "").strip()
     app.state.football_client = FootballDataClient(api_key=legacy_api_key) if legacy_api_key else None
     try:
@@ -118,7 +126,7 @@ async def lifespan(app: FastAPI):
         if signing_secret
         else None
     )
-    if app.state.sports_provider is None:
+    if app.state.sports_provider is None or app.state.broadcast_catalog is None:
         logger.warning("Hosted sports catalog and events are degraded")
     if not signing_secret:
         logger.warning("SPORTS_CONFIG_SIGNING_SECRET not set; hosted configuration is disabled")
@@ -157,7 +165,11 @@ async def addon_manifest():
 @app.get("/health", response_model=AddonHealth)
 async def health():
     provider = _sports_provider(required=False)
-    ready = _configuration_store(required=False) is not None and provider is not None
+    ready = (
+        _configuration_store(required=False) is not None
+        and provider is not None
+        and _broadcast_catalog(required=False) is not None
+    )
     return AddonHealth(
         status="ok" if ready else "degraded",
         version=ADDON_VERSION,
@@ -273,6 +285,7 @@ def addon_events(config_id: str | None = Header(None, alias="X-RadioFlow-Config-
     return scheduled_matches_to_suggest_block_events(
         matches,
         configuration,
+        broadcast_catalog=_broadcast_catalog(),
         schedule_timezone=os.getenv("SPORTS_SCHEDULE_TIMEZONE", "America/Santiago"),
     )
 
@@ -316,6 +329,13 @@ def _sports_provider(required: bool = True) -> SportsProvider | None:
     if required and not provider:
         raise HTTPException(status_code=503, detail="Sports provider is unavailable")
     return provider
+
+
+def _broadcast_catalog(required: bool = True) -> BroadcastCatalog | None:
+    catalog = getattr(app.state, "broadcast_catalog", None)
+    if required and not catalog:
+        raise HTTPException(status_code=503, detail="Sports broadcast catalog is unavailable")
+    return catalog
 
 
 def _competition_payload(competition: Competition) -> dict[str, str | None]:
