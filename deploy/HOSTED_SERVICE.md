@@ -7,6 +7,7 @@ This service is a separate long-running container on the existing VPS. It does n
 - `SPORTS_PROVIDER=thesportsdb`: selects the single deterministic Alpha provider.
 - `THESPORTSDB_API_KEY`: `123` is TheSportsDB's documented Free v1 key; replace it with the hosted operator's key when appropriate.
 - `SPORTS_COMPETITIONS_FILE`: technical catalog containing internal competition IDs and provider mappings.
+- `SPORTS_BROADCASTS_FILE`: provider-neutral mapping from stable competition/team IDs to preferred radio stations and HTTPS streams.
 - `SPORTS_SCHEDULE_TIMEZONE`: final display timezone used when translating UTC matches to `suggest_block` schedule fields.
 - `SPORTS_CONFIG_SIGNING_SECRET`: at least 32 random bytes. It derives opaque `configId` values during the one-time exchange; rotate only with an explicit migration because existing IDs depend on it.
 - `SPORTS_ALLOWED_CALLBACK_ORIGINS`: comma-separated RadioFlow deployment origins. Production must not retain localhost defaults.
@@ -17,7 +18,9 @@ TheSportsDB is the Alpha reference provider, not an Addon Protocol dependency. I
 
 The provider normalizes `dateEvent` + `strTime` to UTC and rejects ambiguous or contradictory timestamps. The wizard receives only internal competition/team IDs. Provider IDs and credentials never leave this service.
 
-The web-configurable service has not yet been deployed, so there is no production data migration. Existing development SQLite files created by the API-Football branch contain numeric provider IDs and must be discarded or reconfigured; do not promote them to the hosted volume.
+The broadcast catalog is owned by the Sports add-on and never enters RadioFlow core. A team mapping takes precedence when one of the configured teams is involved; otherwise the competition default is used. These stations are preferred sports-radio sources, not a guarantee that a specific match is being broadcast. The emitted description states that coverage depends on the station's programming. RadioFlow receives only generic `radioLabel`, `stationName`, `radioUrl`, `radioCountry`, and `streamUrl` metadata and can therefore create the existing `live_radio` block without knowing the sport or provider.
+
+This release does not migrate the hosted SQLite configuration store; the broadcast catalog is file-backed and uses the existing stable competition and team IDs. It intentionally versions new suggestion identities as `sports-broadcast-v1`, so RadioFlow can ingest playable replacements instead of treating them as receipts for the older metadata-only events. Previously accepted blocks are not mutated: remove an overlapping old block before accepting its playable replacement.
 
 ## Build and run
 

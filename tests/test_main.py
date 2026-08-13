@@ -83,7 +83,7 @@ class TestHealthEndpoint:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "version": "0.3.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "ok", "version": "0.4.0", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_provider_credentials(self, client):
         app.state.sports_provider = None
@@ -91,7 +91,15 @@ class TestHealthEndpoint:
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.3.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "degraded", "version": "0.4.0", "provider": "thesportsdb"}
+
+    def test_health_is_degraded_without_broadcast_catalog(self, client):
+        app.state.broadcast_catalog = None
+
+        resp = client.get("/health")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "degraded", "version": "0.4.0", "provider": "thesportsdb"}
 
 
 class TestAddonManifest:
@@ -104,7 +112,7 @@ class TestAddonManifest:
             "id": "app.radioflow.sports",
             "name": "Sports Notifications",
             "description": "Scheduled sports events from the hosted RadioFlow service.",
-            "version": "0.3.0",
+            "version": "0.4.0",
             "author": "RadioFlow",
             "capabilities": ["notifications", "suggest_blocks"],
             "events": ["suggest_block"],
@@ -166,7 +174,11 @@ class TestAddonEvents:
         assert len(events) == 1
         assert events[0]["type"] == "suggest_block"
         assert events[0]["source"] == "app.radioflow.sports"
-        assert events[0]["data"]["externalContentId"] == "sports:match-123"
+        assert events[0]["data"]["externalContentId"] == "sports-broadcast-v1:match-123"
+        assert events[0]["data"]["title"] == "Colo-Colo vs Universidad de Chile"
+        assert events[0]["data"]["metadata"]["radioLabel"] == "Radio Cooperativa"
+        assert events[0]["data"]["metadata"]["stationName"] == "Radio Cooperativa"
+        assert events[0]["data"]["metadata"]["streamUrl"].endswith("/icecast.audio")
         assert events[0]["data"]["metadata"]["eventType"] == "match.scheduled"
         assert events[0]["data"]["metadata"]["source"] == "sports-addon"
         assert events[0]["data"]["metadata"]["startsAt"].endswith("Z")

@@ -54,10 +54,13 @@ Variables del servicio alojado:
 SPORTS_PROVIDER=thesportsdb
 THESPORTSDB_API_KEY=123
 SPORTS_COMPETITIONS_FILE=config/sports_competitions.json
+SPORTS_BROADCASTS_FILE=config/sports_broadcasts.json
 SPORTS_SCHEDULE_TIMEZONE=America/Santiago
 ```
 
 `THESPORTSDB_API_KEY=123` es la clave Free publicada por TheSportsDB. Una clave premium puede reemplazarla sin cambiar el core. El catálogo técnico declara qué competiciones habilita el operador y mantiene los mappings específicos dentro de `config/sports_competitions.json`.
+
+`config/sports_broadcasts.json` mantiene las radios preferidas usando los mismos IDs internos estables. Un mapping de equipo tiene prioridad y, si no existe, se usa la radio predeterminada de la competición. Estas referencias no aseguran que una emisora transmita un partido específico: el payload indica expresamente que la cobertura depende de su programación. RadioFlow sólo recibe metadatos genéricos (`radioLabel`, `stationName`, `radioUrl`, `radioCountry`, `streamUrl`) y conserva su conversión existente a `live_radio`.
 
 Para usar las fuentes chilenas oficiales, el cambio de provider no modifica el configurador ni el protocolo:
 
@@ -207,7 +210,7 @@ Documentación interactiva en `http://localhost:8000/docs`.
 curl http://localhost:8000/health
 ```
 
-Respuesta: `{"status": "ok", "version": "0.3.0", "provider": "thesportsdb"}`
+Respuesta: `{"status": "ok", "version": "0.4.0", "provider": "thesportsdb"}`
 
 #### `GET /events/today`
 

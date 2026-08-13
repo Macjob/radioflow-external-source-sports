@@ -1,0 +1,32 @@
+{
+  "stations": {
+    "radio-cooperativa": {
+      "label": "Radio Cooperativa",
+      "url": "https://www.cooperativa.cl/radioenvivo/",
+      "streamUrl": "https://unlimited3-cl.dps.live/cooperativafm/mp3/icecast.audio",
+      "country": "CL"
+    },
+    "adn-radio": {
+      "label": "ADN Radio",
+      "url": "https://www.adnradio.cl/",
+      "streamUrl": "https://playerservices.streamtheworld.com/api/livestream-redirect/ADNAAC.aac",
+      "country": "CL"
+    },
+    "radio-agricultura": {
+      "label": "Radio Agricultura",
+      "url": "https://www.radioagricultura.cl/",
+      "streamUrl": "https://unlimited4-us.dps.live/agricultura/gotardis/audio/now/livestream1.m3u8",
+      "country": "CL"
+    }
+  },
+  "competitions": {
+    "chile-primera-division": {
+      "defaultStation": "radio-cooperativa",
+      "teamStations": {
+        "chile-primera-division:colo-colo": "radio-cooperativa",
+        "chile-primera-division:universidad-de-chile": "adn-radio",
+        "chile-primera-division:universidad-catolica": "radio-agricultura"
+      }
+    }
+  }
+}
