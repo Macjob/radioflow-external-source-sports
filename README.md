@@ -42,11 +42,11 @@ La dependencia alojada sigue esta frontera:
 wizard + lógica de configuración
               ↓
        SportsProvider
-              ↓
-     TheSportsDBProvider
+        /          \
+TheSportsDBProvider ChileSportsProvider
 ```
 
-`SportsProvider` entrega sólo `Competition`, `Team` y `ScheduledMatch`. Los campos `idLeague`, `idTeam`, `idEvent`, `strTimestamp` y demás estructuras externas se traducen dentro del adapter. Los IDs guardados en la configuración son internos (`chile-primera-division`, por ejemplo), no IDs globales del proveedor.
+`SportsProvider` entrega sólo `Competition`, `Team`, `ScheduledMatch` y `CompletedMatch`. Los campos `idLeague`, `idTeam`, `idEvent`, `strTimestamp` y demás estructuras externas se traducen dentro del adapter. Los IDs guardados en la configuración son internos (`chile-primera-division`, por ejemplo), no IDs globales del proveedor.
 
 Variables del servicio alojado:
 
@@ -58,6 +58,16 @@ SPORTS_SCHEDULE_TIMEZONE=America/Santiago
 ```
 
 `THESPORTSDB_API_KEY=123` es la clave Free publicada por TheSportsDB. Una clave premium puede reemplazarla sin cambiar el core. El catálogo técnico declara qué competiciones habilita el operador y mantiene los mappings específicos dentro de `config/sports_competitions.json`.
+
+Para usar las fuentes chilenas oficiales, el cambio de provider no modifica el configurador ni el protocolo:
+
+```env
+SPORTS_PROVIDER=chile
+CHILE_SPORTS_SCHEDULE_URL=https://www.campeonatochileno.cl/competition/liga-de-primera/
+CHILE_SPORTS_ANFP_API_URL=https://www.anfp.cl/wp-json/wp/v2/posts
+CHILE_SPORTS_REGULAR_SYNC_HOURS=24
+CHILE_SPORTS_NEAR_MATCH_SYNC_HOURS=4
+```
 
 Para agregar un provider futuro:
 
@@ -77,11 +87,22 @@ TheSportsDB Free documenta 30 requests/minuto, hasta 1 resultado para `eventsnex
 
 TheSportsDB documenta `dateEvent` + `strTime` como UTC. El adapter usa esos campos, comprueba cualquier `strTimestamp` coexistente y expone sólo `startsAt` UTC. Los campos `dateEventLocal` y `strTimeLocal` no salen del adapter.
 
+### ChileSportsProvider
+
+La primera implementación cubre únicamente Liga de Primera Chile 2026. `CampeonatoChilenoScheduleSource` obtiene el fixture público server-rendered de CampeonatoChileno.cl mediante un `GET` condicional (`Last-Modified`/`If-Modified-Since`), valida la temporada y un mínimo esperado de 16 clubes y 240 partidos, y normaliza calendario y resultados antes de escribirlos atómicamente en SQLite. Los placeholders que sólo traen fecha, sin hora visible confirmada, se conservan con provenance pero no se publican como `ScheduledMatch`.
+
+`AnfpAnnouncementSource` consume el WordPress REST público de ANFP con `modified_after`. En esta versión sus comunicados se guardan y se clasifican sólo como candidatos simples de reprogramación, suspensión o aplazamiento; no sustituyen automáticamente el horario estructurado del fixture. No hay NLP complejo ni fallback híbrido con TheSportsDB.
+
+El provider nunca consulta las fuentes por usuario. El proceso hace una revisión de vencimiento cada hora, sincroniza normalmente cada 24 horas y reduce el intervalo a 4 horas si hay un partido confirmado dentro de los próximos siete días. Una respuesta `304` actualiza el estado de sincronización; una caída, respuesta vacía o cambio incompatible de HTML registra el error y conserva el último snapshot bueno. Los IDs de partido se derivan de competición, temporada, fecha del torneo y equipos, por lo que un cambio de horario o del ID externo actualiza el mismo partido interno.
+
+La automatización usa exclusivamente páginas y endpoints públicos, con un `User-Agent` identificable, sin autenticación, evasión anti-bot ni polling agresivo. Como el fixture depende de HTML, sus selectores y umbrales son una protección deliberada: ante un cambio estructural el sistema degrada la actualización en vez de sobrescribir datos válidos. La URL, el ID externo, `fetchedAt`, `last successful sync` y los mappings se mantienen sólo dentro del Sports Addon para diagnóstico; no se filtran a RadioFlow.
+
 ---
 
 ## Stack
 
 - Python 3.11+
+- Beautiful Soup 4
 - FastAPI
 - Requests
 - Pydantic v2

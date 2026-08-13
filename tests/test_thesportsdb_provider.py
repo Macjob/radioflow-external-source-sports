@@ -9,6 +9,7 @@ import requests
 from app.provider_config import load_competition_catalog
 from app.providers.thesportsdb import TheSportsDBProvider
 from app.sports_provider import (
+    CompletedMatchOptions,
     ProviderInvalidResponseError,
     ProviderRateLimitedError,
     ProviderUnauthorizedError,
@@ -86,6 +87,23 @@ def test_empty_provider_collections_are_supported():
             datetime(2026, 8, 20, tzinfo=timezone.utc),
         ),
     ) == []
+
+
+def test_results_remain_available_independently_of_chile_provider():
+    provider, _ = provider_with_payloads(
+        response(payload("thesportsdb_events_4627_2026.json")),
+    )
+
+    results = provider.get_results(
+        "chile-primera-division",
+        CompletedMatchOptions(
+            datetime(2026, 8, 1, tzinfo=timezone.utc),
+            datetime(2026, 8, 2, tzinfo=timezone.utc),
+        ),
+    )
+
+    assert len(results) == 1
+    assert (results[0].home_score, results[0].away_score) == (2, 1)
 
 
 @pytest.mark.parametrize(

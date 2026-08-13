@@ -45,6 +45,8 @@
       "dateEvent": "2026-08-01",
       "strTime": "20:00:00",
       "strStatus": "FT",
+      "intHomeScore": "2",
+      "intAwayScore": "1",
       "strPostponed": "no"
     }
   ]
