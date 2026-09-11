@@ -22,9 +22,12 @@ La versión web-configurable agrega:
 POST /configuration/start
 GET  /configure/{sessionId}
 POST /configuration/exchange
+POST /configuration/finalize
 ```
 
 El manifest declara `configuration.type = "web"`. RadioFlow abre el configurador, recibe un código de un solo uso y lo intercambia por un `configId` opaco. RadioFlow cifra ese bearer credential y lo envía únicamente como `X-RadioFlow-Config-Id`; Sports conserva sólo su hash SHA-256 en SQLite.
+
+Las reconfiguraciones son transaccionales entre ambos servicios: Sports conserva activa la configuración anterior mientras el reemplazo permanece provisional. Después de persistir el nuevo `configId`, RadioFlow llama a `POST /configuration/finalize` con `outcome=commit`; si la persistencia falla usa `outcome=rollback`. `commit` y `rollback` son idempotentes para el mismo resultado, y una configuración provisional no puede leer `/addon/events` antes del commit.
 
 El backend alojado selecciona el proveedor mediante `SPORTS_PROVIDER`. Para Alpha usa `TheSportsDBProvider`, pero el configurador y la generación de eventos consumen únicamente modelos internos neutrales. La credencial nunca se entrega al navegador ni a RadioFlow. La primera vertical permite seleccionar una competición, uno o más equipos y el único evento deportivo habilitado en esta versión: `match.scheduled`. El addon lo traduce a la acción genérica `suggest_block`, manteniendo toda la semántica deportiva fuera del core.
 
@@ -210,7 +213,7 @@ Documentación interactiva en `http://localhost:8000/docs`.
 curl http://localhost:8000/health
 ```
 
-Respuesta: `{"status": "ok", "version": "0.4.0", "provider": "thesportsdb"}`
+Respuesta: `{"status": "ok", "version": "0.5.0", "provider": "thesportsdb"}`
 
 #### `GET /events/today`
 
