@@ -83,7 +83,7 @@ class TestHealthEndpoint:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "version": "0.4.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "ok", "version": "0.5.0", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_provider_credentials(self, client):
         app.state.sports_provider = None
@@ -91,7 +91,7 @@ class TestHealthEndpoint:
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.4.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "degraded", "version": "0.5.0", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_broadcast_catalog(self, client):
         app.state.broadcast_catalog = None
@@ -99,7 +99,7 @@ class TestHealthEndpoint:
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.4.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "degraded", "version": "0.5.0", "provider": "thesportsdb"}
 
 
 class TestAddonManifest:
@@ -112,7 +112,7 @@ class TestAddonManifest:
             "id": "app.radioflow.sports",
             "name": "Sports Notifications",
             "description": "Scheduled sports events from the hosted RadioFlow service.",
-            "version": "0.4.0",
+            "version": "0.5.0",
             "author": "RadioFlow",
             "capabilities": ["notifications", "suggest_blocks"],
             "events": ["suggest_block"],
@@ -120,6 +120,7 @@ class TestAddonManifest:
                 "type": "web",
                 "start": "/configuration/start",
                 "exchange": "/configuration/exchange",
+                "finalize": "/configuration/finalize",
             },
             "endpoints": {"health": "/health", "events": "/addon/events"},
         }
@@ -129,6 +130,76 @@ class TestAddonEvents:
     def test_requires_an_opaque_configuration_header(self, client):
         resp = client.get("/addon/events")
         assert resp.status_code == 401
+        assert client.post("/configuration/finalize", json={"outcome": "commit"}).status_code == 401
+
+    def test_finalize_endpoint_commits_provisional_reconfiguration(self, client):
+        store = app.state.configuration_store
+        install = store.create_session(
+            "s" * 43,
+            "http://testserver/api/addons/configuration/callback",
+            "install",
+        )
+        code, _, _, _ = store.save_configuration(
+            install.id,
+            {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
+            [{"id": "chile-primera-division:colo-colo", "name": "Colo-Colo"}],
+            ["match.scheduled"],
+        )
+        old_config_id, _ = store.exchange_code(code)
+        reconfigure = store.create_session(
+            "r" * 43,
+            "http://testserver/api/addons/configuration/callback",
+            "reconfigure",
+            existing_config_id=old_config_id,
+        )
+        new_code, _, _, _ = store.save_configuration(
+            reconfigure.id,
+            {"id": "chile-primera-division", "name": "Primera División de Chile", "season": "2026"},
+            [{"id": "chile-primera-division:universidad-de-chile", "name": "Universidad de Chile"}],
+            ["match.scheduled"],
+        )
+        new_config_id, _ = store.exchange_code(new_code)
+
+        assert client.get("/addon/events", headers={"X-RadioFlow-Config-Id": old_config_id}).status_code == 200
+        assert client.get("/addon/events", headers={"X-RadioFlow-Config-Id": new_config_id}).status_code == 401
+
+        finalized = client.post(
+            "/configuration/finalize",
+            headers={"X-RadioFlow-Config-Id": new_config_id},
+            json={"outcome": "commit"},
+        )
+        assert finalized.status_code == 200
+        assert finalized.json() == {"status": "ok"}
+        assert client.post(
+            "/configuration/finalize",
+            headers={"X-RadioFlow-Config-Id": new_config_id},
+            json={"outcome": "commit"},
+        ).status_code == 200
+        assert client.get("/addon/events", headers={"X-RadioFlow-Config-Id": old_config_id}).status_code == 401
+        assert client.get("/addon/events", headers={"X-RadioFlow-Config-Id": new_config_id}).status_code == 200
+
+    def test_finalize_rejects_unknown_configuration(self, client):
+        assert client.post(
+            "/configuration/finalize", headers={"X-RadioFlow-Config-Id": "z" * 43},
+            json={"outcome": "commit"},
+        ).status_code == 401
+
+    def test_finalize_endpoint_rolls_back_provisional_reconfiguration(self, client):
+        from tests.test_hosted_configuration import issue_configuration
+
+        store = app.state.configuration_store
+        old = issue_configuration(store)
+        new = issue_configuration(store, old)
+        headers = {"X-RadioFlow-Config-Id": new}
+        for _ in range(2):
+            response = client.post("/configuration/finalize", headers=headers, json={"outcome": "rollback"})
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok"}
+        assert client.post(
+            "/configuration/finalize", headers=headers, json={"outcome": "commit"},
+        ).status_code == 409
+        assert client.get("/addon/events", headers=headers).status_code == 401
+        assert client.get("/addon/events", headers={"X-RadioFlow-Config-Id": old}).status_code == 200
 
     def test_configuration_handshake_filters_and_emits_generic_suggestions(self, client):
         state = "s" * 43

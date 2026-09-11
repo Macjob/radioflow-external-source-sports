@@ -6,13 +6,14 @@ from pydantic import BaseModel, Field
 from app.models import SportsEvent
 
 ADDON_ID = "app.radioflow.sports"
-ADDON_VERSION = "0.4.0"
+ADDON_VERSION = "0.5.0"
 
 
 class AddonConfiguration(BaseModel):
     type: Literal["web"] = "web"
     start: str = "/configuration/start"
     exchange: str = "/configuration/exchange"
+    finalize: str = "/configuration/finalize"
 
 
 class AddonEndpoints(BaseModel):

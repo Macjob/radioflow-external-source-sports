@@ -37,6 +37,14 @@ class StoredConfiguration:
     summary: dict[str, Any]
 
 
+class ConfigurationNotFoundError(ValueError):
+    pass
+
+
+class ConfigurationTransitionError(ValueError):
+    pass
+
+
 class HostedConfigurationStore:
     def __init__(self, database_path: str | Path, signing_secret: str):
         if len(signing_secret.encode("utf-8")) < 32:
@@ -58,7 +66,7 @@ class HostedConfigurationStore:
         validate_callback_url(callback_url)
         if mode not in {"install", "reconfigure"}:
             raise ValueError("invalid configuration mode")
-        existing_hash = hash_config_id(existing_config_id) if existing_config_id else None
+        existing_hash = hash_config_id(existing_config_id) if mode == "reconfigure" and existing_config_id else None
         if mode == "reconfigure" and (not existing_hash or not self.get_configuration(existing_config_id)):
             raise ValueError("unknown configuration")
         session_id = secrets.token_urlsafe(24)
@@ -127,16 +135,24 @@ class HostedConfigurationStore:
             ).fetchone()
             if not active or active[0] is not None:
                 raise ValueError("configuration session was already completed")
-            if session.existing_config_hash:
-                connection.execute(
-                    "UPDATE configurations SET active = 0, updated_at = ? WHERE config_hash = ?",
-                    (now, session.existing_config_hash),
-                )
+            transition_state = "provisional" if session.existing_config_hash else "committed"
+            active_flag = 0 if session.existing_config_hash else 1
             connection.execute(
                 """
                 INSERT INTO configurations
-                    (config_hash, competition_json, teams_json, events_json, summary_json, active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                    (
+                        config_hash,
+                        competition_json,
+                        teams_json,
+                        events_json,
+                        summary_json,
+                        active,
+                        transition_state,
+                        replaces_config_hash,
+                        created_at,
+                        updated_at
+                    )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     config_hash,
@@ -144,6 +160,9 @@ class HostedConfigurationStore:
                     json.dumps(normalized["teams"], separators=(",", ":")),
                     json.dumps(normalized["events"], separators=(",", ":")),
                     json.dumps(summary, separators=(",", ":")),
+                    active_flag,
+                    transition_state,
+                    session.existing_config_hash,
                     now,
                     now,
                 ),
@@ -172,17 +191,105 @@ class HostedConfigurationStore:
             if not row:
                 raise ValueError("configuration code is invalid, expired, or already used")
             configuration = connection.execute(
-                "SELECT summary_json FROM configurations WHERE config_hash = ? AND active = 1",
+                """
+                SELECT summary_json, transition_state, replaces_config_hash FROM configurations
+                WHERE config_hash = ? AND (active = 1 OR transition_state = 'provisional')
+                """,
                 (config_hash,),
             ).fetchone()
             if not configuration:
                 raise ValueError("configuration is unavailable")
+            if configuration[1] == "provisional":
+                previous_hash = configuration[2]
+                previous = connection.execute(
+                    "SELECT active FROM configurations WHERE config_hash = ?", (previous_hash,),
+                ).fetchone()
+                if not previous or previous[0] != 1:
+                    raise ConfigurationTransitionError("previous configuration is no longer active")
+                # Only one replacement may reach Core persistence at a time.
+                # Unexchanged wizard submissions do not reserve the transition.
+                pending = connection.execute(
+                    """
+                    SELECT 1 FROM configurations
+                    WHERE replaces_config_hash = ? AND config_hash != ?
+                        AND transition_state = 'exchanged'
+                    """,
+                    (previous_hash, config_hash),
+                ).fetchone()
+                if pending:
+                    raise ConfigurationTransitionError("another reconfiguration is awaiting finalization")
+                connection.execute(
+                    "UPDATE configurations SET transition_state = 'exchanged' WHERE config_hash = ?",
+                    (config_hash,),
+                )
             connection.execute(
                 "UPDATE configuration_sessions SET exchanged_at = ? WHERE id = ?",
                 (datetime.now(timezone.utc).isoformat(), row[0]),
             )
             connection.commit()
         return config_id, json.loads(configuration[0])
+
+    def finalize_configuration(self, config_id: str, outcome: str = "commit") -> None:
+        validate_opaque(config_id, "configId")
+        if outcome not in {"commit", "rollback"}:
+            raise ConfigurationTransitionError("invalid finalization outcome")
+
+        config_hash = hash_config_id(config_id)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT active, transition_state, replaces_config_hash
+                FROM configurations WHERE config_hash = ?
+                """,
+                (config_hash,),
+            ).fetchone()
+            if not row:
+                raise ConfigurationNotFoundError("unknown configuration")
+
+            active, transition_state, replaces_config_hash = row
+            if outcome == "commit":
+                if active == 1 and transition_state in {None, "committed"}:
+                    connection.commit()
+                    return
+                if transition_state == "rolled_back":
+                    raise ConfigurationTransitionError("configuration was already rolled back")
+                if transition_state != "exchanged":
+                    raise ConfigurationTransitionError("configuration cannot be committed")
+
+                if replaces_config_hash:
+                    replaced = connection.execute(
+                        "UPDATE configurations SET active = 0, updated_at = ? WHERE config_hash = ? AND active = 1",
+                        (now, replaces_config_hash),
+                    )
+                    if replaced.rowcount != 1:
+                        raise ConfigurationTransitionError("previous configuration is no longer active")
+                connection.execute(
+                    """
+                    UPDATE configurations
+                    SET active = 1, transition_state = 'committed', updated_at = ?
+                    WHERE config_hash = ?
+                    """,
+                    (now, config_hash),
+                )
+                connection.commit()
+                return
+
+            if transition_state == "rolled_back":
+                connection.commit()
+                return
+            if transition_state != "exchanged":
+                raise ConfigurationTransitionError("configuration is already committed")
+            connection.execute(
+                """
+                UPDATE configurations
+                SET active = 0, transition_state = 'rolled_back', updated_at = ?
+                WHERE config_hash = ?
+                """,
+                (now, config_hash),
+            )
+            connection.commit()
 
     def get_configuration(self, config_id: str | None) -> StoredConfiguration | None:
         if not config_id:
@@ -236,6 +343,8 @@ class HostedConfigurationStore:
                     events_json TEXT NOT NULL,
                     summary_json TEXT NOT NULL,
                     active INTEGER NOT NULL DEFAULT 1,
+                    transition_state TEXT,
+                    replaces_config_hash TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -254,6 +363,18 @@ class HostedConfigurationStore:
                 CREATE INDEX IF NOT EXISTS configuration_sessions_expiry_idx
                     ON configuration_sessions(expires_at);
                 """
+            )
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(configurations)").fetchall()
+            }
+            if "transition_state" not in columns:
+                connection.execute("ALTER TABLE configurations ADD COLUMN transition_state TEXT")
+            if "replaces_config_hash" not in columns:
+                connection.execute("ALTER TABLE configurations ADD COLUMN replaces_config_hash TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS configurations_transition_state_idx ON configurations(transition_state)"
             )
 
 

@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
@@ -21,7 +22,11 @@ from app.broadcast_catalog import BroadcastCatalog, load_broadcast_catalog
 from app.config import load_config
 from app.configurator_web import render_configuration_html, render_landing_html
 from app.football_client import FootballDataClient
-from app.hosted_configuration import HostedConfigurationStore
+from app.hosted_configuration import (
+    ConfigurationNotFoundError,
+    ConfigurationTransitionError,
+    HostedConfigurationStore,
+)
 from app.hosted_events import scheduled_matches_to_suggest_block_events
 from app.match_service import get_relevant_matches
 from app.models import RadioflowExternalBlock, RadioflowExternalSuggestion, SportsEvent
@@ -61,6 +66,14 @@ class ConfigurationExchangeRequest(BaseModel):
 class ConfigurationExchangeResponse(BaseModel):
     config_id: str = Field(alias="configId")
     summary: dict
+
+
+class ConfigurationFinalizeRequest(BaseModel):
+    outcome: Literal["commit", "rollback"] = "commit"
+
+
+class ConfigurationFinalizeResponse(BaseModel):
+    status: Literal["ok"] = "ok"
 
 
 class CompetitionSelection(BaseModel):
@@ -213,6 +226,27 @@ async def configuration_exchange(payload: ConfigurationExchangeRequest):
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return ConfigurationExchangeResponse(configId=config_id, summary=summary)
+
+
+@app.post(
+    "/configuration/finalize",
+    response_model=ConfigurationFinalizeResponse,
+)
+async def configuration_finalize(
+    payload: ConfigurationFinalizeRequest,
+    config_id: str | None = Header(None, alias="X-RadioFlow-Config-Id"),
+):
+    if not config_id:
+        raise HTTPException(status_code=401, detail="A valid X-RadioFlow-Config-Id is required")
+    try:
+        _configuration_store().finalize_configuration(config_id, payload.outcome)
+    except ConfigurationNotFoundError as error:
+        raise HTTPException(status_code=401, detail="A valid X-RadioFlow-Config-Id is required") from error
+    except ConfigurationTransitionError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return ConfigurationFinalizeResponse()
 
 
 @app.get("/configure/{session_id}", response_class=HTMLResponse)
