@@ -35,15 +35,19 @@ class TheSportsDBProvider:
         session: requests.Session | None = None,
         cache: SingleFlightTTLCache | None = None,
         timeout: int = 10,
+        round_count: int = 0,
         base_url: str = "https://www.thesportsdb.com/api/v1/json",
     ):
         if not api_key:
             raise ValueError("THESPORTSDB_API_KEY is required")
+        if round_count < 0:
+            raise ValueError("THESPORTSDB_ROUND_COUNT must be non-negative")
         self.api_key = api_key
         self.catalog = tuple(entry for entry in catalog if self.name in entry.providers)
         self.session = session or requests.Session()
         self.cache = cache or SingleFlightTTLCache()
         self.timeout = timeout
+        self.round_count = round_count
         self.base_url = base_url.rstrip("/")
 
     @property
@@ -73,17 +77,23 @@ class TheSportsDBProvider:
 
     def _load_teams(self, entry: CompetitionCatalogEntry) -> list[Team]:
         mapping = entry.providers[self.name]
-        catalog_rows = self.cache.get_or_load(
-            f"{self.name}:teams:{mapping.league_name}",
-            TEAMS_CACHE_TTL_SECONDS,
-            lambda: tuple(
-                self._fetch_rows(
-                    "search_all_teams.php",
-                    {"l": mapping.league_name.replace(" ", "_")},
-                    "teams",
-                )
-            ),
-        )
+        if self.round_count:
+            # The free API's team search can be incomplete for smaller leagues.
+            # Round data contains the authoritative team names and is already
+            # needed for the full-season schedule.
+            catalog_rows = ()
+        else:
+            catalog_rows = self.cache.get_or_load(
+                f"{self.name}:teams:{mapping.league_name}",
+                TEAMS_CACHE_TTL_SECONDS,
+                lambda: tuple(
+                    self._fetch_rows(
+                        "search_all_teams.php",
+                        {"l": mapping.league_name.replace(" ", "_")},
+                        "teams",
+                    )
+                ),
+            )
         provider_teams = [
             str(row.get("strTeam", "")).strip()
             for row in catalog_rows
@@ -116,12 +126,15 @@ class TheSportsDBProvider:
         entry = self._competition(competition_id)
         mapping = entry.providers[self.name]
         season_rows = self._season_rows(entry)
-        next_rows = self.cache.get_or_load(
-            f"{self.name}:next:{mapping.league_id}",
-            FIXTURES_CACHE_TTL_SECONDS,
-            lambda: tuple(self._fetch_rows("eventsnextleague.php", {"id": mapping.league_id}, "events")),
-        )
-        rows = (*season_rows, *next_rows)
+        if self.round_count:
+            rows = season_rows
+        else:
+            next_rows = self.cache.get_or_load(
+                f"{self.name}:next:{mapping.league_id}",
+                FIXTURES_CACHE_TTL_SECONDS,
+                lambda: tuple(self._fetch_rows("eventsnextleague.php", {"id": mapping.league_id}, "events")),
+            )
+            rows = (*season_rows, *next_rows)
         starts_after = options.starts_after.astimezone(timezone.utc)
         starts_before = options.starts_before.astimezone(timezone.utc)
         matches: dict[str, ScheduledMatch] = {}
@@ -195,16 +208,36 @@ class TheSportsDBProvider:
     def _season_rows(self, entry: CompetitionCatalogEntry) -> tuple[dict, ...]:
         mapping = entry.providers[self.name]
         return self.cache.get_or_load(
-            f"{self.name}:season:{mapping.league_id}:{entry.current_season}",
+            f"{self.name}:season:{mapping.league_id}:{entry.current_season}:{self.round_count}",
             FIXTURES_CACHE_TTL_SECONDS,
-            lambda: tuple(
+            lambda: self._fetch_season_rows(mapping.league_id, entry.current_season),
+        )
+
+    def _fetch_season_rows(self, league_id: str, season: str) -> tuple[dict, ...]:
+        if not self.round_count:
+            return tuple(
                 self._fetch_rows(
                     "eventsseason.php",
-                    {"id": mapping.league_id, "s": entry.current_season},
+                    {"id": league_id, "s": season},
                     "events",
                 )
-            ),
-        )
+            )
+
+        rows_by_id: dict[str, dict] = {}
+        for round_number in range(1, self.round_count + 1):
+            rows = self._fetch_rows(
+                "eventsround.php",
+                {"id": league_id, "r": str(round_number), "s": season},
+                "events",
+            )
+            for row in rows:
+                event_id = str(row.get("idEvent", "")).strip()
+                if not event_id:
+                    raise ProviderInvalidResponseError(
+                        "sports provider returned an event without an id"
+                    )
+                rows_by_id[event_id] = row
+        return tuple(rows_by_id.values())
 
     def _competition(self, competition_id: str) -> CompetitionCatalogEntry:
         entry = next((item for item in self.catalog if item.id == competition_id), None)
