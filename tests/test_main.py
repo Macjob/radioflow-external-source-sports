@@ -83,7 +83,7 @@ class TestHealthEndpoint:
     def test_health(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok", "version": "0.5.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "ok", "version": "0.5.1", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_provider_credentials(self, client):
         app.state.sports_provider = None
@@ -91,7 +91,7 @@ class TestHealthEndpoint:
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.5.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "degraded", "version": "0.5.1", "provider": "thesportsdb"}
 
     def test_health_is_degraded_without_broadcast_catalog(self, client):
         app.state.broadcast_catalog = None
@@ -99,7 +99,7 @@ class TestHealthEndpoint:
         resp = client.get("/health")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "degraded", "version": "0.5.0", "provider": "thesportsdb"}
+        assert resp.json() == {"status": "degraded", "version": "0.5.1", "provider": "thesportsdb"}
 
 
 class TestAddonManifest:
@@ -112,7 +112,7 @@ class TestAddonManifest:
             "id": "app.radioflow.sports",
             "name": "Sports Notifications",
             "description": "Scheduled sports events from the hosted RadioFlow service.",
-            "version": "0.5.0",
+            "version": "0.5.1",
             "author": "RadioFlow",
             "capabilities": ["notifications", "suggest_blocks"],
             "events": ["suggest_block"],

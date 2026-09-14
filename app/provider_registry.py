@@ -57,6 +57,15 @@ def _create_chile(
             "CHILE_SPORTS_SCHEDULE_URL",
             "https://www.campeonatochileno.cl/competition/liga-de-primera/",
         ),
+        fallback_url=environment.get(
+            "CHILE_SPORTS_FALLBACK_URL",
+            "https://www.campeonatochileno.cl/pagina-2026/",
+        ).strip()
+        or None,
+        fallback_competition_name=environment.get(
+            "CHILE_SPORTS_FALLBACK_COMPETITION_NAME",
+            "Liga de Primera",
+        ).strip(),
         session=shared_session,
         timeout=timeout,
         user_agent=environment.get(

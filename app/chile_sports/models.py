@@ -54,6 +54,7 @@ class SourceDocument:
     fetched_at: datetime
     last_modified: str | None = None
     not_modified: bool = False
+    partial: bool = False
 
 
 @dataclass(frozen=True)

@@ -97,6 +97,8 @@ TheSportsDB documenta `dateEvent` + `strTime` como UTC. El adapter usa esos camp
 
 La primera implementación cubre únicamente Liga de Primera Chile 2026. `CampeonatoChilenoScheduleSource` obtiene el fixture público server-rendered de CampeonatoChileno.cl mediante un `GET` condicional (`Last-Modified`/`If-Modified-Since`), valida la temporada y un mínimo esperado de 16 clubes y 240 partidos, y normaliza calendario y resultados antes de escribirlos atómicamente en SQLite. Los placeholders que sólo traen fecha, sin hora visible confirmada, se conservan con provenance pero no se publican como `ScheduledMatch`.
 
+Si el fixture completo responde `403`, el provider puede usar `CHILE_SPORTS_FALLBACK_URL` (por defecto la página pública oficial `/pagina-2026/`) como refresco parcial de los partidos próximos de `Liga de Primera`. Ese fallback conserva los mismos IDs internos derivados de fecha del torneo y equipos, actualiza sólo las filas presentes y nunca elimina el resto del snapshot de 240 partidos. Los detalles ausentes en las tarjetas parciales, como estadio o notas de suspensión, se preservan desde el último snapshot completo. El fallback no reutiliza `If-Modified-Since`, no sustituye la fuente principal y puede deshabilitarse dejando `CHILE_SPORTS_FALLBACK_URL` vacío.
+
 `AnfpAnnouncementSource` consume el WordPress REST público de ANFP con `modified_after`. En esta versión sus comunicados se guardan y se clasifican sólo como candidatos simples de reprogramación, suspensión o aplazamiento; no sustituyen automáticamente el horario estructurado del fixture. No hay NLP complejo ni fallback híbrido con TheSportsDB.
 
 El provider nunca consulta las fuentes por usuario. El proceso hace una revisión de vencimiento cada hora, sincroniza normalmente cada 24 horas y reduce el intervalo a 4 horas si hay un partido confirmado dentro de los próximos siete días. Una respuesta `304` actualiza el estado de sincronización; una caída, respuesta vacía o cambio incompatible de HTML registra el error y conserva el último snapshot bueno. Los IDs de partido se derivan de competición, temporada, fecha del torneo y equipos, por lo que un cambio de horario o del ID externo actualiza el mismo partido interno.
@@ -213,7 +215,7 @@ Documentación interactiva en `http://localhost:8000/docs`.
 curl http://localhost:8000/health
 ```
 
-Respuesta: `{"status": "ok", "version": "0.5.0", "provider": "thesportsdb"}`
+Respuesta: `{"status": "ok", "version": "0.5.1", "provider": "thesportsdb"}`
 
 #### `GET /events/today`
 

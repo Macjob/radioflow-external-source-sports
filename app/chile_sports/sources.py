@@ -68,11 +68,15 @@ class CampeonatoChilenoScheduleSource:
         self,
         url: str,
         *,
+        fallback_url: str | None = None,
+        fallback_competition_name: str = "Liga de Primera",
         session: requests.Session | None = None,
         timeout: int = 15,
         user_agent: str = DEFAULT_USER_AGENT,
     ):
         self.url = url
+        self.fallback_url = fallback_url
+        self.fallback_competition_name = fallback_competition_name
         self.session = session or requests.Session()
         self.timeout = timeout
         self.user_agent = user_agent
@@ -88,7 +92,28 @@ class CampeonatoChilenoScheduleSource:
         except requests.RequestException as error:
             raise ProviderUnavailableError("Campeonato Chileno request failed") from error
         fetched_at = datetime.now(timezone.utc)
+        partial = False
+        if response.status_code == 403 and self.fallback_url:
+            fallback_headers = {
+                "User-Agent": self.user_agent,
+                "Accept": "text/html,application/xhtml+xml",
+            }
+            try:
+                response = self.session.get(
+                    self.fallback_url,
+                    headers=fallback_headers,
+                    timeout=self.timeout,
+                )
+            except (requests.Timeout, requests.ConnectionError) as error:
+                raise ProviderUnavailableError("Campeonato Chileno fallback is unavailable") from error
+            except requests.RequestException as error:
+                raise ProviderUnavailableError("Campeonato Chileno fallback request failed") from error
+            partial = True
         if response.status_code == 304:
+            if partial:
+                raise ProviderInvalidResponseError(
+                    "Campeonato Chileno fallback returned HTTP 304 without a conditional request"
+                )
             return SourceDocument(None, fetched_at, if_modified_since, not_modified=True)
         if response.status_code == 429:
             raise ProviderRateLimitedError("Campeonato Chileno rate limit reached")
@@ -103,7 +128,8 @@ class CampeonatoChilenoScheduleSource:
         return SourceDocument(
             response.text,
             fetched_at,
-            response.headers.get("last-modified"),
+            None if partial else response.headers.get("last-modified"),
+            partial=partial,
         )
 
     def parse(
@@ -119,6 +145,16 @@ class CampeonatoChilenoScheduleSource:
         if not document.body:
             raise ProviderInvalidResponseError("Campeonato Chileno returned an empty document")
         soup = BeautifulSoup(document.body, "html.parser")
+        if document.partial:
+            return self._parse_partial_schedule(
+                soup,
+                competition_id=competition_id,
+                competition_name=competition_name,
+                country=country,
+                expected_season=expected_season,
+                external_competition_id=external_competition_id,
+            )
+
         title_node = soup.select_one(".competition-header__title")
         season_node = soup.select_one(".competition-header__sub-title")
         if not title_node or not season_node:
@@ -169,6 +205,130 @@ class CampeonatoChilenoScheduleSource:
             competition,
             tuple(sorted(teams.values(), key=lambda item: item.name.casefold())),
             tuple(matches),
+        )
+
+    def _parse_partial_schedule(
+        self,
+        soup: BeautifulSoup,
+        *,
+        competition_id: str,
+        competition_name: str,
+        country: str,
+        expected_season: str,
+        external_competition_id: str,
+    ) -> ScheduleSnapshot:
+        competition = SourceCompetition(
+            id=competition_id,
+            name=competition_name,
+            country=country,
+            season=expected_season,
+            external_id=external_competition_id,
+        )
+        teams: dict[str, SourceTeam] = {}
+        matches: list[SourceMatch] = []
+        match_ids: set[str] = set()
+
+        for node in soup.select(".anwp-fl-game.match-card[data-anwp-match][data-fl-game-datetime]"):
+            headers = node.select(".match-card__header-item")
+            if len(headers) < 2:
+                continue
+            source_competition = headers[0].get_text(" ", strip=True)
+            if source_competition.casefold() != self.fallback_competition_name.casefold():
+                continue
+            matchweek = headers[1].get_text(" ", strip=True)
+            if not matchweek:
+                raise ProviderInvalidResponseError("Campeonato Chileno fallback matchweek changed")
+
+            source_match = self._parse_partial_match(
+                node,
+                competition_id=competition_id,
+                season=expected_season,
+                matchweek=matchweek,
+            )
+            if source_match.id in match_ids:
+                raise ProviderInvalidResponseError("Campeonato Chileno fallback returned duplicate matches")
+            match_ids.add(source_match.id)
+            matches.append(source_match)
+            teams[source_match.home_team.id] = source_match.home_team
+            teams[source_match.away_team.id] = source_match.away_team
+
+        if not matches:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback returned no matches")
+        return ScheduleSnapshot(
+            competition,
+            tuple(sorted(teams.values(), key=lambda item: item.name.casefold())),
+            tuple(matches),
+        )
+
+    def _parse_partial_match(
+        self,
+        node,
+        *,
+        competition_id: str,
+        season: str,
+        matchweek: str,
+    ) -> SourceMatch:
+        team_nodes = node.select(".match-card__club-title")
+        link_node = node.select_one('a.anwp-link-cover[href*="/match/"]')
+        if len(team_nodes) != 2 or not link_node:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback match markup changed")
+        home_id, home_name = normalized_team(competition_id, team_nodes[0].get_text(" ", strip=True))
+        away_id, away_name = normalized_team(competition_id, team_nodes[1].get_text(" ", strip=True))
+        home_team = SourceTeam(home_id, home_name, home_id.rsplit(":", 1)[-1])
+        away_team = SourceTeam(away_id, away_name, away_id.rsplit(":", 1)[-1])
+
+        raw_datetime = str(node.get("data-fl-game-datetime", "")).strip()
+        try:
+            local_start = datetime.fromisoformat(raw_datetime)
+        except ValueError as error:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback returned an invalid kickoff") from error
+        if local_start.tzinfo is None:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback kickoff has no timezone")
+        time_node = node.select_one(".match__time-formatted")
+        time_text = time_node.get_text(" ", strip=True) if time_node else ""
+        time_confirmed = bool(re.search(r"\d{1,2}:\d{2}", time_text))
+        starts_at = local_start.astimezone(timezone.utc) if time_confirmed else None
+
+        status_class = next(
+            (item for item in node.get("class", []) if item.startswith("game-status-")),
+            "game-status-0",
+        )
+        status = "finished" if status_class == "game-status-1" else "scheduled"
+        home_score = self._score(node.select_one(".anwp-fl-game__scores-home"))
+        away_score = self._score(node.select_one(".anwp-fl-game__scores-away"))
+        if status == "finished" and (home_score is None or away_score is None):
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback finished match has no score")
+
+        source_url = urljoin(self.fallback_url or self.url, str(link_node.get("href", "")))
+        if urlparse(source_url).netloc != urlparse(self.url).netloc:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback returned an external match URL")
+        external_id = str(node.get("data-anwp-match", "")).strip()
+        if not external_id:
+            raise ProviderInvalidResponseError("Campeonato Chileno fallback match has no source ID")
+        internal_id = _stable_match_id(
+            competition_id,
+            season,
+            matchweek,
+            home_team.id,
+            away_team.id,
+        )
+        return SourceMatch(
+            id=internal_id,
+            external_id=external_id,
+            competition_id=competition_id,
+            season=season,
+            matchweek=matchweek,
+            source_date=local_start.date(),
+            starts_at=starts_at,
+            time_confirmed=time_confirmed,
+            home_team=home_team,
+            away_team=away_team,
+            venue=None,
+            status=status,
+            home_score=home_score,
+            away_score=away_score,
+            source_url=source_url,
+            note=None,
         )
 
     def _parse_match(
