@@ -73,6 +73,60 @@ def test_catalog_and_season_queries_are_cached_by_competition_not_installation()
     assert session.get.call_args_list[1].kwargs["params"] == {"id": "4627", "s": "2026"}
 
 
+def test_round_mode_loads_complete_season_without_incomplete_team_search():
+    session = MagicMock()
+    session.get.side_effect = [
+        response({"events": [
+            {
+                "idEvent": "1",
+                "strHomeTeam": "Club A",
+                "strAwayTeam": "Club B",
+                "dateEvent": "2026-01-30",
+                "strTime": "20:00:00",
+                "strStatus": "FT",
+                "intHomeScore": "1",
+                "intAwayScore": "0",
+            }
+        ]}),
+        response({"events": [
+            {
+                "idEvent": "2",
+                "strHomeTeam": "Club C",
+                "strAwayTeam": "Club D",
+                "dateEvent": "2026-02-06",
+                "strTime": "20:00:00",
+                "strStatus": "NS",
+                "strTimestamp": "2026-02-06T20:00:00",
+            }
+        ]}),
+    ]
+    provider = TheSportsDBProvider(
+        "123",
+        load_competition_catalog(),
+        session=session,
+        round_count=2,
+    )
+
+    teams = provider.get_teams("chile-primera-division")
+    scheduled = provider.get_scheduled_matches(
+        "chile-primera-division",
+        ScheduledMatchOptions(
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 3, 1, tzinfo=timezone.utc),
+        ),
+    )
+
+    assert [team.name for team in teams] == ["Club A", "Club B", "Club C", "Club D"]
+    assert len(scheduled) == 1
+    assert session.get.call_count == 2
+    assert session.get.call_args_list[0].args[0].endswith("/eventsround.php")
+    assert session.get.call_args_list[0].kwargs["params"] == {
+        "id": "4627",
+        "r": "1",
+        "s": "2026",
+    }
+
+
 def test_empty_provider_collections_are_supported():
     provider, _ = provider_with_payloads(
         response({"teams": None}),

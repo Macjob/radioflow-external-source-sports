@@ -33,6 +33,7 @@ def _create_thesportsdb(
         catalog=catalog,
         session=session,
         cache=cache,
+        round_count=int(environment.get("THESPORTSDB_ROUND_COUNT", "0")),
         base_url=environment.get("THESPORTSDB_BASE_URL", "https://www.thesportsdb.com/api/v1/json"),
     )
 
