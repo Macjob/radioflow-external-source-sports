@@ -86,11 +86,11 @@ class ChileSportsSyncService:
                 expected_season=self.season,
                 external_competition_id=self.external_competition_id,
             )
-            if len(snapshot.teams) < self.expected_team_count:
+            if not document.partial and len(snapshot.teams) < self.expected_team_count:
                 raise ProviderInvalidResponseError(
                     f"Campeonato Chileno returned only {len(snapshot.teams)} teams"
                 )
-            if len(snapshot.matches) < self.expected_match_count:
+            if not document.partial and len(snapshot.matches) < self.expected_match_count:
                 raise ProviderInvalidResponseError(
                     f"Campeonato Chileno returned only {len(snapshot.matches)} matches"
                 )
@@ -99,13 +99,15 @@ class ChileSportsSyncService:
                 source=self.schedule_source.name,
                 fetched_at=document.fetched_at,
                 last_modified=document.last_modified,
+                partial=document.partial,
             )
             logger.info(
-                "Chile sports sync completed: source=%s matches_discovered=%d matches_changed=%d total=%d",
+                "Chile sports sync completed: source=%s matches_discovered=%d matches_changed=%d total=%d partial=%s",
                 self.schedule_source.name,
                 discovered,
                 changed,
                 len(snapshot.matches),
+                document.partial,
             )
         except ProviderError as error:
             self.store.record_failure(self.schedule_source.name, now, str(error))

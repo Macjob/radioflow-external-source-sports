@@ -131,6 +131,7 @@ class ChileSportsStore:
         source: str,
         fetched_at: datetime,
         last_modified: str | None,
+        partial: bool = False,
     ) -> tuple[int, int]:
         fetched_text = _utc_text(fetched_at)
         discovered = 0
@@ -195,21 +196,34 @@ class ChileSportsStore:
                 existing = connection.execute(
                     """
                     SELECT matchweek, source_date, starts_at, time_confirmed, venue, status,
-                           home_score, away_score, source_external_id
+                           home_score, away_score, source_external_id, source_note
                     FROM sports_matches WHERE id = ?
                     """,
                     (match.id,),
                 ).fetchone()
+                venue = match.venue
+                note = match.note
+                status = match.status
+                home_score = match.home_score
+                away_score = match.away_score
+                if partial and existing is not None:
+                    venue = venue if venue is not None else existing["venue"]
+                    note = note if note is not None else existing["source_note"]
+                    if status == "scheduled" and existing["status"] in {"finished", "postponed", "suspended"}:
+                        status = existing["status"]
+                    home_score = home_score if home_score is not None else existing["home_score"]
+                    away_score = away_score if away_score is not None else existing["away_score"]
                 values = (
                     match.matchweek,
                     match.source_date.isoformat(),
                     _utc_text(match.starts_at),
                     int(match.time_confirmed),
-                    match.venue,
-                    match.status,
-                    match.home_score,
-                    match.away_score,
+                    venue,
+                    status,
+                    home_score,
+                    away_score,
                     match.external_id,
+                    note,
                 )
                 if existing is None:
                     discovered += 1
@@ -248,14 +262,14 @@ class ChileSportsStore:
                         int(match.time_confirmed),
                         match.home_team.id,
                         match.away_team.id,
-                        match.venue,
-                        match.status,
-                        match.home_score,
-                        match.away_score,
+                        venue,
+                        status,
+                        home_score,
+                        away_score,
                         source,
                         match.external_id,
                         match.source_url,
-                        match.note,
+                        note,
                         fetched_text,
                         fetched_text,
                     ),
