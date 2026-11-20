@@ -73,6 +73,25 @@ def test_catalog_and_season_queries_are_cached_by_competition_not_installation()
     assert session.get.call_args_list[1].kwargs["params"] == {"id": "4627", "s": "2026"}
 
 
+def test_round_mode_reuses_successful_rounds_after_rate_limit():
+    session = MagicMock()
+    session.get.side_effect = [
+        response({"events": [{"idEvent": "1", "strHomeTeam": "Club A", "strAwayTeam": "Club B"}]}),
+        response(status_code=429),
+        response({"events": [{"idEvent": "2", "strHomeTeam": "Club C", "strAwayTeam": "Club D"}]}),
+    ]
+    provider = TheSportsDBProvider("test", load_competition_catalog(), session=session, round_count=2)
+
+    with pytest.raises(ProviderRateLimitedError):
+        provider.get_teams("chile-primera-division")
+
+    assert [call.kwargs["params"]["r"] for call in session.get.call_args_list] == ["1", "2"]
+    teams = provider.get_teams("chile-primera-division")
+
+    assert [call.kwargs["params"]["r"] for call in session.get.call_args_list] == ["1", "2", "2"]
+    assert [team.name for team in teams] == ["Club A", "Club B", "Club C", "Club D"]
+
+
 def test_round_mode_loads_complete_season_without_incomplete_team_search():
     session = MagicMock()
     session.get.side_effect = [

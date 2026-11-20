@@ -207,6 +207,8 @@ class TheSportsDBProvider:
 
     def _season_rows(self, entry: CompetitionCatalogEntry) -> tuple[dict, ...]:
         mapping = entry.providers[self.name]
+        if self.round_count:
+            return self._fetch_season_rows(mapping.league_id, entry.current_season)
         return self.cache.get_or_load(
             f"{self.name}:season:{mapping.league_id}:{entry.current_season}:{self.round_count}",
             FIXTURES_CACHE_TTL_SECONDS,
@@ -225,19 +227,29 @@ class TheSportsDBProvider:
 
         rows_by_id: dict[str, dict] = {}
         for round_number in range(1, self.round_count + 1):
-            rows = self._fetch_rows(
-                "eventsround.php",
-                {"id": league_id, "r": str(round_number), "s": season},
-                "events",
+            # A failed round must not discard successful requests earlier in the season.
+            rows_by_id.update(
+                self.cache.get_or_load(
+                    f"{self.name}:round:{league_id}:{season}:{round_number}",
+                    FIXTURES_CACHE_TTL_SECONDS,
+                    lambda round_number=round_number: self._fetch_round_rows(league_id, season, round_number),
+                )
             )
-            for row in rows:
-                event_id = str(row.get("idEvent", "")).strip()
-                if not event_id:
-                    raise ProviderInvalidResponseError(
-                        "sports provider returned an event without an id"
-                    )
-                rows_by_id[event_id] = row
         return tuple(rows_by_id.values())
+
+    def _fetch_round_rows(self, league_id: str, season: str, round_number: int) -> dict[str, dict]:
+        rows = self._fetch_rows(
+            "eventsround.php",
+            {"id": league_id, "r": str(round_number), "s": season},
+            "events",
+        )
+        rows_by_id: dict[str, dict] = {}
+        for row in rows:
+            event_id = str(row.get("idEvent", "")).strip()
+            if not event_id:
+                raise ProviderInvalidResponseError("sports provider returned an event without an id")
+            rows_by_id[event_id] = row
+        return rows_by_id
 
     def _competition(self, competition_id: str) -> CompetitionCatalogEntry:
         entry = next((item for item in self.catalog if item.id == competition_id), None)
