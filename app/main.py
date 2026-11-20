@@ -7,7 +7,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -272,12 +272,20 @@ def configuration_leagues(session: str = Query(...)):
 
 @app.get("/configure/api/teams")
 def configuration_teams(
+    response: Response,
     session: str = Query(...),
     competition: str = Query(..., min_length=2, max_length=160),
 ):
-    _require_session(session)
+    pending = _require_session(session)
     try:
         teams = _sports_provider().get_teams(competition)
+    except ProviderRateLimitedError as error:
+        saved = _configuration_by_hash(pending.existing_config_hash) if pending.existing_config_hash else None
+        if not saved or saved["competition"]["id"] != competition:
+            raise _provider_http_exception(error) from error
+        response.headers["X-RadioFlow-Team-Catalog"] = "saved"
+        response.headers["Cache-Control"] = "no-store"
+        return saved["teams"]
     except (ProviderError, ValueError) as error:
         raise _provider_http_exception(error) from error
     return [_team_payload(team) for team in teams]
@@ -285,8 +293,21 @@ def configuration_teams(
 
 @app.post("/configure/{session_id}/complete")
 def configuration_complete(session_id: str, selection: ConfigurationSelection):
+    pending = _require_session(session_id)
     try:
-        competition, teams = _canonicalize_selection(selection)
+        try:
+            competition, teams = _canonicalize_selection(selection)
+        except ProviderRateLimitedError:
+            saved = _configuration_by_hash(pending.existing_config_hash) if pending.existing_config_hash else None
+            if (
+                not saved
+                or selection.competition.id != saved["competition"]["id"]
+                or selection.competition.season != saved["competition"]["season"]
+                or sorted(team.id for team in selection.teams) != sorted(team["id"] for team in saved["teams"])
+                or selection.events != saved["events"]
+            ):
+                raise
+            competition, teams = saved["competition"], saved["teams"]
         code, state, callback_url, summary = _configuration_store().save_configuration(
             session_id,
             competition,
@@ -422,8 +443,10 @@ def _provider_http_exception(error: Exception) -> HTTPException:
 
 
 def _require_session(session_id: str):
-    if not _configuration_store().get_session(session_id):
+    session = _configuration_store().get_session(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Configuration session not found or expired")
+    return session
 
 
 def _configuration_by_hash(config_hash: str):
