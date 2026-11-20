@@ -72,6 +72,7 @@ async function loadLeagues(){{
 }}
 async function loadTeams(){{
   button.disabled=true;
+  error.textContent='';
   selectAllRow.hidden=true;
   selectAll.checked=false;
   selectAll.indeterminate=false;
@@ -79,10 +80,17 @@ async function loadTeams(){{
   const option=league.selectedOptions[0];
   if(!option.value){{teams.textContent='Selecciona una competición.';return;}}
   teams.textContent='Cargando equipos…';
-  const rows=await fetch(`${{base}}/configure/api/teams?session=${{encodeURIComponent(session)}}&competition=${{encodeURIComponent(option.value)}}`).then(r=>r.ok?r.json():Promise.reject());
+  const response=await fetch(`${{base}}/configure/api/teams?session=${{encodeURIComponent(session)}}&competition=${{encodeURIComponent(option.value)}}`);
+  if(!response.ok){{
+    teams.textContent='No pudimos cargar los equipos.';
+    return;
+  }}
+  const rows=await response.json();
+  const savedOnly=response.headers.get('X-RadioFlow-Team-Catalog')==='saved';
   const selected=new Set((current.teams||[]).map(x=>String(x.id)));
-  teams.innerHTML=rows.map(x=>`<label class="team"><input type="checkbox" value="${{x.id}}" data-name="${{x.name}}" ${{selected.has(String(x.id))?'checked':''}}> ${{x.name}}</label>`).join('');
-  selectAllRow.hidden=rows.length===0;
+  teams.innerHTML=rows.map(x=>`<label class="team"><input type="checkbox" value="${{x.id}}" data-name="${{x.name}}" ${{selected.has(String(x.id))?'checked':''}} ${{savedOnly?'disabled':''}}> ${{x.name}}</label>`).join('');
+  selectAllRow.hidden=savedOnly||rows.length===0;
+  if(savedOnly)error.textContent='El proveedor alcanzó su límite. Puedes conservar la selección guardada.';
   syncTeamSelection();
   button.disabled=false;
 }}

@@ -11,7 +11,13 @@ from app.config import Config
 from app.hosted_configuration import HostedConfigurationStore
 from app.main import app
 from app.models import CountryConfig, RadioInfo
-from app.sports_provider import Competition, ScheduledMatch, Team, TeamRef
+from app.sports_provider import (
+    Competition,
+    ProviderRateLimitedError,
+    ScheduledMatch,
+    Team,
+    TeamRef,
+)
 from tests.conftest import today_at_utc
 
 
@@ -253,6 +259,55 @@ class TestAddonEvents:
         assert events[0]["data"]["metadata"]["eventType"] == "match.scheduled"
         assert events[0]["data"]["metadata"]["source"] == "sports-addon"
         assert events[0]["data"]["metadata"]["startsAt"].endswith("Z")
+
+    def test_rate_limit_allows_only_the_active_saved_selection(self, client):
+        from tests.test_hosted_configuration import issue_configuration, selection
+
+        store = app.state.configuration_store
+        old_config_id = issue_configuration(store)
+        started = client.post(
+            "/configuration/start",
+            headers={"X-RadioFlow-Config-Id": old_config_id},
+            json={
+                "callbackUrl": "http://testserver/api/addons/configuration/callback",
+                "state": "r" * 43,
+                "mode": "reconfigure",
+            },
+        )
+        session_id = started.json()["configureUrl"].rsplit("/", 1)[-1]
+        competition, teams, events = selection()
+        app.state.sports_provider.get_teams.side_effect = ProviderRateLimitedError("limited")
+
+        response = client.get("/configure/api/teams", params={"session": session_id, "competition": competition["id"]})
+        assert response.status_code == 200
+        assert response.headers["X-RadioFlow-Team-Catalog"] == "saved"
+        assert response.json() == teams
+
+        complete = f"/configure/{session_id}/complete"
+        payload = {"competition": competition, "teams": teams, "events": events}
+        changed = [{**teams[0], "id": "chile-primera-division:other-team"}]
+        assert client.post(complete, json={**payload, "teams": changed}).status_code == 429
+        install = client.post("/configuration/start", json={
+            "callbackUrl": "http://testserver/api/addons/configuration/callback",
+            "state": "n" * 43,
+            "mode": "install",
+        })
+        install_id = install.json()["configureUrl"].rsplit("/", 1)[-1]
+        assert client.get(
+            "/configure/api/teams", params={"session": install_id, "competition": competition["id"]}
+        ).status_code == 429
+        assert client.post(f"/configure/{install_id}/complete", json=payload).status_code == 429
+        forged = [{**team, "name": "Client-supplied name"} for team in teams]
+        response = client.post(complete, json={**payload, "teams": forged})
+        assert response.status_code == 200
+        code = parse_qs(urlparse(response.json()["callbackUrl"]).query)["code"][0]
+        exchanged = client.post("/configuration/exchange", json={"code": code})
+        new_config_id = exchanged.json()["configId"]
+        assert store.get_configuration(old_config_id).teams == teams
+        assert client.post(
+            "/configuration/finalize", headers={"X-RadioFlow-Config-Id": new_config_id}, json={"outcome": "commit"}
+        ).status_code == 200
+        assert store.get_configuration(new_config_id).teams == teams
 
     def test_catalog_endpoints_use_normalized_provider_models(self, client):
         started = client.post("/configuration/start", json={
